@@ -1875,7 +1875,7 @@ st.html(
         margin-bottom: -1.6rem;
     }
     .st-key-header_erase_credentials {
-        margin-top: 1.2rem;
+        margin-top: 2.35rem;
     }
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"] {
