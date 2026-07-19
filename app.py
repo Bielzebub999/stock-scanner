@@ -1353,6 +1353,14 @@ st.markdown(
 
 saved_preferences = load_preferences()
 cloud_deployment = is_streamlit_cloud()
+configured_sec_contact_email = ""
+if cloud_deployment:
+    try:
+        configured_sec_contact_email = str(
+            st.secrets.get("SEC_CONTACT_EMAIL", "")
+        ).strip()
+    except Exception:
+        configured_sec_contact_email = ""
 if "symbols_text" not in st.session_state:
     st.session_state["symbols_text"] = saved_preferences.get(
         "symbols",
@@ -1380,7 +1388,10 @@ if symbols and normalized_symbols_text != saved_preferences.get("symbols", ""):
         st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
 if "watchlist_message" in st.session_state:
     st.toast(st.session_state.pop("watchlist_message"))
-sec_contact_email = st.session_state["sec_contact_email"].strip()
+sec_contact_email = (
+    configured_sec_contact_email
+    or st.session_state["sec_contact_email"].strip()
+)
 
 if "sidebar_stock_search_open" not in st.session_state:
     st.session_state["sidebar_stock_search_open"] = False
@@ -1482,8 +1493,9 @@ st.markdown(
     }
     .st-key-floating_stock_search {
         position: fixed;
-        top: 4.25rem;
-        right: 1rem;
+        top: 0.35rem;
+        left: 20.25rem;
+        right: auto;
         width: min(24rem, calc(100vw - 2rem));
         z-index: 1000000;
         padding: 0.6rem;
@@ -1509,6 +1521,12 @@ st.markdown(
         .st-key-native_hamburger_navigation {
             left: min(14.25rem, calc(100vw - 6rem));
             width: 3.25rem;
+        }
+        .st-key-floating_stock_search {
+            top: 3.25rem;
+            left: auto;
+            right: 0.75rem;
+            width: min(24rem, calc(100vw - 1.5rem));
         }
     }
     section[data-testid="stSidebar"] {
@@ -2988,19 +3006,24 @@ with research_tab:
         )
     with research_credentials_column:
         with st.expander("SEC", expanded=False):
-            sec_contact_email = st.text_input(
-                "SEC contact email",
-                placeholder="you@example.com",
-                help=(
-                    "Used only for this browser session to identify requests to the SEC."
-                    if cloud_deployment
-                    else "Used only to identify this app's requests to the SEC."
-                ),
-                type="password",
-                key="sec_contact_email",
-            ).strip()
+            if cloud_deployment and configured_sec_contact_email:
+                sec_contact_email = configured_sec_contact_email
+                st.caption("SEC access is configured securely for this app.")
+            else:
+                sec_contact_email = st.text_input(
+                    "SEC contact email",
+                    placeholder="you@example.com",
+                    help=(
+                        "Used only for this browser session to identify requests to the SEC."
+                        if cloud_deployment
+                        else "Used only to identify this app's requests to the SEC."
+                    ),
+                    type="password",
+                    key="sec_contact_email",
+                ).strip()
             if cloud_deployment:
-                st.caption("This email is not saved and is private to your current session.")
+                if not configured_sec_contact_email:
+                    st.caption("This email is not saved and is private to your current session.")
             elif st.button("Save email", key="save_sec_email_default"):
                 if not sec_contact_email or "@" not in sec_contact_email:
                     st.error("Enter a valid email address before saving.")
