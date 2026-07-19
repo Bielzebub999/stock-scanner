@@ -16,13 +16,6 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
 
-ALPACA_API_KEY = os.getenv("APCA_API_KEY_ID") or st.secrets.get("ALPACA_API_KEY_ID")
-ALPACA_SECRET_KEY = os.getenv("APCA_API_SECRET_KEY") or st.secrets.get("ALPACA_API_SECRET_KEY")
-
-if not ALPACA_API_KEY or not ALPACA_SECRET_KEY:
-    st.warning("⚠️ **Alpaca Credentials Missing:** Please set up your API keys to load live market data.")
-    st.stop()  # Script safely stops here if keys are missing
-
 
 try:
     import extra_streamlit_components as stx
