@@ -1521,12 +1521,13 @@ if "watchlist_message" in st.session_state:
 sec_contact_email = st.session_state["sec_contact_email"].strip()
 
 with st.container(key="floating_stock_search"):
-    with st.popover(
+    search_query = st.text_input(
         "Search stocks",
-        icon=":material/search:",
-        use_container_width=True,
-        help="Search by company name or ticker",
-    ):
+        placeholder="Search stocks…",
+        key="floating_stock_search_query",
+        label_visibility="collapsed",
+    ).strip().lower()
+    with st.container(key="floating_stock_results"):
         if not sec_contact_email or "@" not in sec_contact_email:
             st.caption("Enter your SEC email in Company Research to enable lookup.")
         else:
@@ -1536,12 +1537,6 @@ with st.container(key="floating_stock_search"):
                 sidebar_company_names = dict(
                     zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
                 )
-                search_query = st.text_input(
-                    "Search by company name or ticker",
-                    placeholder="Search company or ticker…",
-                    key="floating_stock_search_query",
-                    label_visibility="collapsed",
-                ).strip().lower()
                 if search_query:
                     matching_symbols = [
                         ticker
@@ -1561,7 +1556,7 @@ with st.container(key="floating_stock_search"):
                     else:
                         st.caption("No matching stocks found.")
                 else:
-                    st.caption("Results will appear below as you type.")
+                    st.caption("Type a company name or ticker.")
             except Exception:
                 st.caption("Stock lookup is temporarily unavailable.")
 
@@ -1640,13 +1635,20 @@ st.markdown(
         box-shadow: none;
         backdrop-filter: none;
     }
-    .st-key-floating_stock_search div[data-testid="stButton"] button {
+    .st-key-floating_stock_search div[data-testid="stTextInput"] input {
         height: 2.35rem;
         min-height: 2.35rem;
     }
-    .st-key-floating_stock_search div[data-testid="stPopover"] > button {
-        height: 2.35rem;
-        min-height: 2.35rem;
+    .st-key-floating_stock_results {
+        display: none;
+        padding: 0.35rem;
+        background: rgba(255, 255, 255, 0.98);
+        border: 1px solid #bfd7f5;
+        border-radius: 0.75rem;
+        box-shadow: 0 14px 35px rgba(30, 58, 138, 0.22);
+    }
+    .st-key-floating_stock_search:focus-within .st-key-floating_stock_results {
+        display: block;
     }
     .st-key-native_hamburger_navigation {
         position: fixed;
