@@ -1910,16 +1910,22 @@ st.html(
         font-size: 0.95rem;
         text-align: center;
         margin-top: -2.5rem;
-        margin-bottom: 0;
+        margin-bottom: -2.5rem;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
         margin-bottom: 0rem !important;
 	padding-bottom: 0rem !important;
     }
 	
-    div[data-testid="stVerticalBlock"] {
- 	gap: 0.5rem !important; /* Reduces the universal gap between ALL elements */
+/* Target the inner vertical layout spacing directly without overlaps */
+div[data-testid="stVerticalBlock"] > div {
+    margin-bottom: 0px !important;
 }
+
+div[data-testid="stVerticalBlock"] {
+    gap: 0.5rem !important; /* Reduces the standard empty gap between elements */
+}
+
     .st-key-header_erase_credentials {
         margin-top: 1.75rem;
     }
