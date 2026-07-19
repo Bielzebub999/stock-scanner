@@ -257,7 +257,7 @@ def add_symbol_to_watchlist(symbol: str) -> None:
         try:
             save_symbol_preferences(updated_text)
             st.session_state["watchlist_message"] = (
-                f"{symbol} was added for this session."
+                f"{symbol} was added and saved in this browser."
                 if is_streamlit_cloud()
                 else f"{symbol} was added and your ticker list was saved."
             )
@@ -431,7 +431,7 @@ def normalize_symbols_text() -> None:
     try:
         save_symbol_preferences(updated_text)
         st.session_state["watchlist_message"] = (
-            "Ticker symbols updated for this session."
+            "Ticker symbols updated and saved in this browser."
             if is_streamlit_cloud()
             else "Ticker symbols saved."
         )
@@ -460,7 +460,7 @@ def remove_symbols_from_watchlist(symbols_to_remove: list) -> None:
             symbol for symbol in symbols_to_remove if symbol in current_symbols
         )
         st.session_state["watchlist_message"] = (
-            f"Removed for this session: {removed_text}."
+            f"Removed and saved in this browser: {removed_text}."
             if is_streamlit_cloud()
             else f"Removed and saved: {removed_text}."
         )
@@ -1572,6 +1572,13 @@ if st.session_state["selected_main_page"] not in main_pages:
 requested_main_page = st.query_params.get("page")
 if requested_main_page in main_pages:
     st.session_state["selected_main_page"] = requested_main_page
+previous_main_page = st.session_state.get("_previous_main_page")
+if (
+    st.session_state["selected_main_page"] == "Alpaca Live Market Data"
+    and previous_main_page != "Alpaca Live Market Data"
+):
+    st.session_state.pop("alpaca_attempted_signature", None)
+st.session_state["_previous_main_page"] = st.session_state["selected_main_page"]
 
 with st.sidebar.container(key="native_watchlist_navigation"):
     st.markdown(
@@ -1672,7 +1679,11 @@ symbols = list(dict.fromkeys(
     if symbol.strip()
 ))
 normalized_symbols_text = ", ".join(symbols)
-if symbols and normalized_symbols_text != saved_preferences.get("symbols", ""):
+if (
+    symbols
+    and not cloud_deployment
+    and normalized_symbols_text != saved_preferences.get("symbols", "")
+):
     try:
         save_symbol_preferences(normalized_symbols_text)
     except OSError as exc:
@@ -1739,12 +1750,6 @@ with st.container(key="floating_stock_search"):
             ):
                 st.session_state["stock_lookup_warning_shown"] = True
                 show_stock_lookup_unavailable_dialog()
-
-if (
-    st.session_state["selected_main_page"] == "Alpaca Live Market Data"
-    and alpaca_credentials_missing
-):
-    show_alpaca_credentials_required_dialog()
 
 st.sidebar.subheader("Momentum settings")
 minimum_volume_spike_percent = st.sidebar.slider(
@@ -3069,7 +3074,7 @@ with all_tab:
 with alpaca_tab:
     st.caption(
         "Current quotes for your watchlist. Free IEX covers one exchange; paid SIP "
-        "covers all U.S. exchanges. API settings are in the left sidebar."
+        "covers all U.S. exchanges. API settings are on the Settings page."
     )
 
     refresh_alpaca_quotes = st.button(
@@ -3085,12 +3090,12 @@ with alpaca_tab:
     )
     auto_load_alpaca = (
         selected_main_page == "Alpaca Live Market Data"
-        and bool(alpaca_key)
-        and bool(alpaca_secret)
         and bool(symbols)
         and st.session_state.get("alpaca_loaded_signature") != alpaca_request_signature
+        and st.session_state.get("alpaca_attempted_signature") != alpaca_request_signature
     )
     if auto_load_alpaca or refresh_alpaca_quotes:
+        st.session_state["alpaca_attempted_signature"] = alpaca_request_signature
         try:
             with st.spinner("Connecting to Alpaca and loading current quotes…"):
                 st.session_state["alpaca_live_quotes"] = get_alpaca_live_quotes(
@@ -3108,10 +3113,13 @@ with alpaca_tab:
                 st.success(f"Refreshed Alpaca {alpaca_feed.upper()} quotes.")
         except HTTPError as exc:
             if exc.code in (401, 403):
-                st.error(
-                    "Alpaca rejected the connection. Check the API key and secret, and make "
-                    "sure your account is allowed to use the selected feed."
-                )
+                if not alpaca_key or not alpaca_secret:
+                    show_alpaca_credentials_required_dialog()
+                else:
+                    st.error(
+                        "Alpaca rejected the connection. Check the API key and secret, and make "
+                        "sure your account is allowed to use the selected feed."
+                    )
             else:
                 st.error(f"Alpaca returned an error ({exc.code}). Please try again.")
         except (URLError, TimeoutError) as exc:
@@ -3124,7 +3132,7 @@ with alpaca_tab:
         if not symbols:
             st.info("Add at least one stock symbol before loading live quotes.")
         elif not alpaca_key or not alpaca_secret:
-            st.info("Open the small API box in the upper-right and add your credentials.")
+            st.info("Add your Alpaca API key and secret on the Settings page.")
         else:
             st.info("Connecting to Alpaca…")
     else:
