@@ -1573,6 +1573,22 @@ st.markdown(
     'market data — not financial advice.</div>',
     unsafe_allow_html=True,
 )
+if (
+    st.session_state["selected_main_page"] == "Settings"
+    and is_streamlit_cloud()
+):
+    with st.container(key="header_erase_credentials"):
+        _, erase_credentials_column, _ = st.columns([1, 1.2, 1])
+        with erase_credentials_column:
+            if st.button(
+                "Erase Credentials",
+                key="erase_saved_credentials",
+                use_container_width=True,
+            ):
+                show_erase_credentials_dialog()
+        erased_message = st.session_state.pop("credentials_erased_message", "")
+        if erased_message:
+            st.success(erased_message)
 
 saved_preferences = load_preferences()
 cloud_deployment = is_streamlit_cloud()
@@ -1856,7 +1872,14 @@ st.html(
         margin-bottom: 0;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
-        margin-bottom: -1.25rem;
+        margin-bottom: -1.6rem;
+    }
+    .st-key-header_erase_credentials {
+        margin-top: 1.2rem;
+    }
+    div[data-testid="stMainBlockContainer"]
+        > div[data-testid="stVerticalBlock"] {
+        gap: 0.3rem !important;
     }
     h2, h3 {
         color: #1e3a8a;
@@ -2022,7 +2045,7 @@ st.html(
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"]
         > div[data-testid="stTabs"] {
-        margin-top: -0.5rem !important;
+        margin-top: -0.75rem !important;
     }
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"]
@@ -3439,18 +3462,6 @@ with research_tab:
         )
 
 with settings_tab:
-    if cloud_deployment:
-        _, erase_credentials_column, _ = st.columns([1, 1.2, 1])
-        with erase_credentials_column:
-            if st.button(
-                "Erase Credentials",
-                key="erase_saved_credentials",
-                use_container_width=True,
-            ):
-                show_erase_credentials_dialog()
-        erased_message = st.session_state.pop("credentials_erased_message", "")
-        if erased_message:
-            st.success(erased_message)
     if st.query_params.get("focus") == "sec_email":
         st.info("Enter your SEC contact email below, then choose Save on this Mac.")
     sec_explanation_column, sec_form_column = st.columns([1.35, 1])
