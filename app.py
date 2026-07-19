@@ -5,6 +5,7 @@ from plotly.subplots import make_subplots
 import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
+import datetime
 import json
 import os
 import re
@@ -14,6 +15,11 @@ from bs4 import BeautifulSoup
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote
 from urllib.request import Request, urlopen
+
+try:
+    import extra_streamlit_components as stx
+except ImportError:
+    stx = None
 
 
 DEFAULT_SYMBOLS = [
@@ -29,6 +35,8 @@ PREFERENCES_FILE = (
     / "preferences.json"
 )
 FALLBACK_PREFERENCES_FILE = Path("/tmp/local.educational.stock-scanner-preferences.json")
+BROWSER_WATCHLIST_COOKIE = "stock_scanner_watchlist"
+browser_cookie_manager = None
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
@@ -71,6 +79,16 @@ def is_streamlit_cloud() -> bool:
 
 def load_preferences() -> dict:
     if is_streamlit_cloud():
+        if browser_cookie_manager is not None:
+            try:
+                saved_symbols = browser_cookie_manager.get(
+                    cookie=BROWSER_WATCHLIST_COOKIE
+                )
+                if saved_symbols:
+                    st.session_state["_browser_watchlist_cookie"] = saved_symbols
+                    return {"symbols": saved_symbols}
+            except Exception:
+                pass
         return {}
     for preferences_path in (
         PREFERENCES_FILE,
@@ -89,6 +107,21 @@ def load_preferences() -> dict:
 
 def write_preferences(preferences: dict) -> None:
     if is_streamlit_cloud():
+        saved_symbols = str(preferences.get("symbols", "")).strip()
+        if (
+            browser_cookie_manager is not None
+            and saved_symbols
+            and st.session_state.get("_browser_watchlist_cookie") != saved_symbols
+        ):
+            try:
+                browser_cookie_manager.set(
+                    BROWSER_WATCHLIST_COOKIE,
+                    saved_symbols,
+                    expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
+                )
+                st.session_state["_browser_watchlist_cookie"] = saved_symbols
+            except Exception:
+                pass
         return
     try:
         PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1298,6 +1331,8 @@ def render_live_combined_chart(
 
 
 st.set_page_config(page_title="Stock Scanner", page_icon="📈", layout="wide")
+if is_streamlit_cloud() and stx is not None:
+    browser_cookie_manager = stx.CookieManager(key="stock_scanner_cookie_manager")
 main_pages = [
     "My Watchlist",
     "Alpaca Live Market Data",
@@ -1361,11 +1396,21 @@ if cloud_deployment:
         ).strip()
     except Exception:
         configured_sec_contact_email = ""
-if "symbols_text" not in st.session_state:
+saved_browser_symbols = saved_preferences.get("symbols", "")
+if (
+    "symbols_text" not in st.session_state
+    or (
+        cloud_deployment
+        and saved_browser_symbols
+        and not st.session_state.get("_browser_watchlist_loaded", False)
+    )
+):
     st.session_state["symbols_text"] = saved_preferences.get(
         "symbols",
         ", ".join(DEFAULT_SYMBOLS),
     )
+if cloud_deployment and saved_browser_symbols:
+    st.session_state["_browser_watchlist_loaded"] = True
 if "sec_contact_email" not in st.session_state:
     st.session_state["sec_contact_email"] = saved_preferences.get("sec_contact_email", "")
 
