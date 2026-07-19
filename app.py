@@ -40,6 +40,10 @@ BROWSER_ALPACA_KEY_COOKIE = "stock_scanner_alpaca_key"
 BROWSER_ALPACA_SECRET_COOKIE = "stock_scanner_alpaca_secret"
 BROWSER_SEC_EMAIL_COOKIE = "stock_scanner_sec_email"
 browser_cookie_manager = None
+live_stock_search_component = components.declare_component(
+    "live_stock_search",
+    path=str(Path(__file__).with_name("live_stock_search_component")),
+)
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
@@ -1420,6 +1424,7 @@ main_pages = [
     "Autopilot Research",
     "Company Research",
     "Top 20",
+    "Settings",
 ]
 if "selected_main_page" not in st.session_state:
     st.session_state["selected_main_page"] = main_pages[0]
@@ -1520,107 +1525,24 @@ if symbols and normalized_symbols_text != saved_preferences.get("symbols", ""):
 if "watchlist_message" in st.session_state:
     st.toast(st.session_state.pop("watchlist_message"))
 
-with st.sidebar.expander("API", expanded=False):
-    alpaca_key = st.text_input(
-        "API key",
-        type="password",
-        key="alpaca_api_key",
-        help="Saved only in this browser when you choose Save on this Mac.",
-    ).strip()
-    alpaca_secret = st.text_input(
-        "API secret",
-        type="password",
-        key="alpaca_api_secret",
-        help="Saved only in this browser when you choose Save on this Mac.",
-    ).strip()
-    if cloud_deployment:
-        if st.button(
-            "Save on this Mac",
-            key="save_browser_alpaca",
-            use_container_width=True,
-        ):
-            if not alpaca_key or not alpaca_secret:
-                st.error("Enter both Alpaca credentials before saving.")
-            else:
-                try:
-                    save_browser_credentials(
-                        alpaca_api_key=alpaca_key,
-                        alpaca_api_secret=alpaca_secret,
-                    )
-                    st.success("Saved in this browser.")
-                except OSError as exc:
-                    st.error(str(exc))
-        st.button(
-            "Forget",
-            key="forget_browser_alpaca",
-            use_container_width=True,
-            on_click=forget_browser_credentials,
-            kwargs={"include_sec": False},
-        )
-        if st.session_state.pop("browser_alpaca_message", ""):
-            st.success("Saved credentials removed.")
-    alpaca_feed_label = st.radio(
-        "Market-data feed",
-        ["IEX — free, one exchange", "SIP — paid, all U.S. exchanges"],
-        key="alpaca_feed",
-    )
+alpaca_key = st.session_state.get("alpaca_api_key", "").strip()
+alpaca_secret = st.session_state.get("alpaca_api_secret", "").strip()
+alpaca_feed_label = st.session_state.get("alpaca_feed", "IEX — free, one exchange")
 alpaca_feed = "sip" if alpaca_feed_label.startswith("SIP") else "iex"
-
-with st.sidebar.expander("SEC", expanded=False):
-    sec_contact_email = st.text_input(
-        "SEC contact email",
-        placeholder="you@example.com",
-        help=(
-            "Saved only in this browser when you choose Save on this Mac."
-            if cloud_deployment
-            else "Used only to identify this app's requests to the SEC."
-        ),
-        key="sec_contact_email",
-    ).strip()
-    if cloud_deployment:
-        if st.button(
-            "Save on this Mac",
-            key="save_browser_sec_email",
-            use_container_width=True,
-        ):
-            if not sec_contact_email or "@" not in sec_contact_email:
-                st.error("Enter a valid email address before saving.")
-            else:
-                try:
-                    save_browser_credentials(sec_contact_email=sec_contact_email)
-                    st.success("Saved in this browser.")
-                except OSError as exc:
-                    st.error(str(exc))
-        st.button(
-            "Forget",
-            key="forget_browser_sec_email",
-            use_container_width=True,
-            on_click=forget_browser_credentials,
-            kwargs={"include_alpaca": False},
-        )
-        if st.session_state.pop("browser_sec_message", ""):
-            st.success("Saved email removed.")
-    elif st.button("Save email", key="save_sec_email_default", use_container_width=True):
-        if not sec_contact_email or "@" not in sec_contact_email:
-            st.error("Enter a valid email address before saving.")
-        else:
-            try:
-                save_email_preference(sec_contact_email)
-                st.success("SEC email saved as the default.")
-            except OSError as exc:
-                st.error(f"The SEC email could not be saved: {exc}")
+sec_contact_email = st.session_state.get("sec_contact_email", "").strip()
 
 with st.container(key="floating_stock_search"):
     if not sec_contact_email or "@" not in sec_contact_email:
-        st.selectbox(
-            "Search stocks",
-            options=[],
-            index=None,
-            placeholder="Enter SEC email first…",
-            key="floating_stock_lookup_disabled",
-            label_visibility="collapsed",
-            disabled=True,
-        )
+        if st.button(
+            "Search stocks…",
+            icon=":material/search:",
+            key="stock_search_requires_email",
+            use_container_width=True,
+        ):
+            st.toast(
+                "Add and save your SEC contact email on the Settings page before searching stocks.",
+                icon="⚠️",
+            )
     else:
         try:
             sidebar_directory = get_sec_company_directory(sec_contact_email)
@@ -1629,26 +1551,30 @@ with st.container(key="floating_stock_search"):
                 zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
             )
             sidebar_search_options = [
-                f"{ticker} · {sidebar_company_names.get(ticker, '')}"
+                {
+                    "ticker": ticker,
+                    "label": f"{ticker} · {sidebar_company_names.get(ticker, '')}",
+                    "search": f"{ticker} {sidebar_company_names.get(ticker, '')}",
+                }
                 for ticker in sidebar_directory["Ticker"].tolist()
             ]
-            st.selectbox(
-                "Search stocks",
+            search_version = st.session_state.get("live_stock_search_version", 0)
+            selected_search_symbol = live_stock_search_component(
                 options=sidebar_search_options,
-                index=None,
                 placeholder="Search stocks…",
-                key="floating_stock_lookup",
-                label_visibility="collapsed",
-                on_change=select_floating_stock,
+                key=f"live_stock_search_{search_version}",
+                default=None,
             )
+            if selected_search_symbol:
+                add_symbol_to_watchlist(str(selected_search_symbol))
+                st.session_state["live_stock_search_version"] = search_version + 1
+                st.rerun()
         except Exception:
-            st.selectbox(
-                "Search stocks",
-                options=[],
-                index=None,
-                placeholder="Stock lookup unavailable…",
-                key="floating_stock_lookup_unavailable",
-                label_visibility="collapsed",
+            st.button(
+                "Stock lookup unavailable",
+                icon=":material/search_off:",
+                key="stock_search_unavailable",
+                use_container_width=True,
                 disabled=True,
             )
 
@@ -2239,6 +2165,7 @@ selected_internal_label = internal_page_labels[selected_page_index]
     autopilot_tab,
     research_tab,
     top_graded_tab,
+    settings_tab,
 ) = st.tabs(internal_page_labels, default=selected_internal_label)
 
 display_columns = [
@@ -3380,6 +3307,146 @@ with research_tab:
             "auditor changes (4.01), and financial statements that should no longer be "
             "relied upon (4.02). Always open and read the filing because context matters."
         )
+
+with settings_tab:
+    alpaca_instructions_column, alpaca_form_column = st.columns([1.35, 1])
+    with alpaca_instructions_column:
+        st.markdown("### Alpaca market-data access")
+        st.write(
+            "The Alpaca key and secret allow the scanner to request live market quotes. "
+            "They do not give this app permission to place trades."
+        )
+        st.markdown(
+            """
+1. Open the Alpaca sign-in page using the button below.
+2. Create a free account, or sign in to an account you already have.
+3. Open your **Paper Trading** account. Paper Trading is the safest choice and does not use real money.
+4. On the Alpaca dashboard, find **API Keys**. Depending on the dashboard version, it may be on the Home page, in the right sidebar, or under **Manage Accounts**.
+5. Choose **Generate New Keys** (or **Regenerate** if keys already exist).
+6. Copy the **API Key ID** and paste it into **API key** on this page.
+7. Copy the **Secret Key** and paste it into **API secret**. Alpaca normally shows the secret only once. If it is lost, generate a new pair.
+8. Leave the market-data feed on **IEX — free** unless the Alpaca account includes paid SIP data.
+9. Choose **Save on this Mac**. Repeat these steps separately on each person’s Mac.
+            """
+        )
+        st.link_button(
+            "Open Alpaca sign in",
+            "https://app.alpaca.markets/account/login",
+            use_container_width=True,
+        )
+        st.caption(
+            "Never email, text, or screenshot an API secret. Your friend should create and save "
+            "their own keys on their own Mac."
+        )
+    with alpaca_form_column:
+        with st.container(border=True):
+            st.markdown("#### Alpaca credentials")
+            alpaca_key = st.text_input(
+                "API key",
+                type="password",
+                key="alpaca_api_key",
+                help="Saved only in this browser when you choose Save on this Mac.",
+            ).strip()
+            alpaca_secret = st.text_input(
+                "API secret",
+                type="password",
+                key="alpaca_api_secret",
+                help="Saved only in this browser when you choose Save on this Mac.",
+            ).strip()
+            alpaca_feed_label = st.radio(
+                "Market-data feed",
+                ["IEX — free, one exchange", "SIP — paid, all U.S. exchanges"],
+                key="alpaca_feed",
+            )
+            if cloud_deployment:
+                if st.button(
+                    "Save on this Mac",
+                    key="save_browser_alpaca",
+                    use_container_width=True,
+                ):
+                    if not alpaca_key or not alpaca_secret:
+                        st.error("Enter both Alpaca credentials before saving.")
+                    else:
+                        try:
+                            save_browser_credentials(
+                                alpaca_api_key=alpaca_key,
+                                alpaca_api_secret=alpaca_secret,
+                            )
+                            st.success("Saved in this browser.")
+                        except OSError as exc:
+                            st.error(str(exc))
+                st.button(
+                    "Forget",
+                    key="forget_browser_alpaca",
+                    use_container_width=True,
+                    on_click=forget_browser_credentials,
+                    kwargs={"include_sec": False},
+                )
+                if st.session_state.pop("browser_alpaca_message", ""):
+                    st.success("Saved credentials removed.")
+
+    st.divider()
+    sec_explanation_column, sec_form_column = st.columns([1.35, 1])
+    with sec_explanation_column:
+        st.markdown("### SEC search access")
+        st.write(
+            "The SEC asks automated tools to identify themselves with contact information. "
+            "The scanner uses this email only in the User-Agent sent with requests to SEC.gov. "
+            "It is not used to create an SEC account, subscribe you to email, or contact your friend."
+        )
+        st.write(
+            "A valid email is also required to download the official SEC company directory that "
+            "powers the stock-name and ticker search at the top of the app."
+        )
+        st.caption(
+            "Use an email address you monitor. Each person should enter and save their own email "
+            "on their own Mac."
+        )
+    with sec_form_column:
+        with st.container(border=True):
+            st.markdown("#### SEC contact email")
+            sec_contact_email = st.text_input(
+                "Email address",
+                placeholder="you@example.com",
+                help="Saved only in this browser when you choose Save on this Mac.",
+                key="sec_contact_email",
+            ).strip()
+            if cloud_deployment:
+                if st.button(
+                    "Save on this Mac",
+                    key="save_browser_sec_email",
+                    use_container_width=True,
+                ):
+                    if not sec_contact_email or "@" not in sec_contact_email:
+                        st.error("Enter a valid email address before saving.")
+                    else:
+                        try:
+                            save_browser_credentials(sec_contact_email=sec_contact_email)
+                            st.success("Saved in this browser.")
+                        except OSError as exc:
+                            st.error(str(exc))
+                st.button(
+                    "Forget",
+                    key="forget_browser_sec_email",
+                    use_container_width=True,
+                    on_click=forget_browser_credentials,
+                    kwargs={"include_alpaca": False},
+                )
+                if st.session_state.pop("browser_sec_message", ""):
+                    st.success("Saved email removed.")
+            elif st.button(
+                "Save email",
+                key="save_sec_email_default",
+                use_container_width=True,
+            ):
+                if not sec_contact_email or "@" not in sec_contact_email:
+                    st.error("Enter a valid email address before saving.")
+                else:
+                    try:
+                        save_email_preference(sec_contact_email)
+                        st.success("SEC email saved as the default.")
+                    except OSError as exc:
+                        st.error(f"The SEC email could not be saved: {exc}")
 
 if errors:
     with st.expander("Symbols with warnings"):
