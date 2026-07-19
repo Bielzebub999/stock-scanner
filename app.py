@@ -1551,6 +1551,9 @@ def render_live_combined_chart(
 st.set_page_config(page_title="Stock Scanner", page_icon="📈", layout="wide")
 if is_streamlit_cloud() and stx is not None:
     browser_cookie_manager = stx.CookieManager(key="stock_scanner_cookie_manager")
+    st.session_state["_browser_cookie_sync_passes"] = (
+        st.session_state.get("_browser_cookie_sync_passes", 0) + 1
+    )
 main_pages = [
     "My Watchlist",
     "Alpaca Live Market Data",
@@ -1696,6 +1699,11 @@ alpaca_secret = st.session_state.get("alpaca_api_secret", "").strip()
 alpaca_feed_label = st.session_state.get("alpaca_feed", "IEX — free, one exchange")
 alpaca_feed = "sip" if alpaca_feed_label.startswith("SIP") else "iex"
 alpaca_credentials_missing = not alpaca_key or not alpaca_secret
+browser_credentials_checked = bool(
+    not cloud_deployment
+    or stx is None
+    or st.session_state.get("_browser_cookie_sync_passes", 0) >= 2
+)
 sec_contact_email = st.session_state.get("sec_contact_email", "").strip()
 
 with st.container(key="floating_stock_search"):
@@ -3091,6 +3099,7 @@ with alpaca_tab:
     auto_load_alpaca = (
         selected_main_page == "Alpaca Live Market Data"
         and bool(symbols)
+        and browser_credentials_checked
         and st.session_state.get("alpaca_loaded_signature") != alpaca_request_signature
         and st.session_state.get("alpaca_attempted_signature") != alpaca_request_signature
     )
@@ -3131,6 +3140,8 @@ with alpaca_tab:
     if not isinstance(alpaca_quotes, pd.DataFrame) or alpaca_quotes.empty:
         if not symbols:
             st.info("Add at least one stock symbol before loading live quotes.")
+        elif not browser_credentials_checked:
+            st.info("Checking this browser for saved Alpaca credentials…")
         elif not alpaca_key or not alpaca_secret:
             st.info("Add your Alpaca API key and secret on the Settings page.")
         else:
