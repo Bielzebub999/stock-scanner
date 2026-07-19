@@ -224,10 +224,22 @@ def forget_browser_credentials(include_alpaca: bool = True, include_sec: bool = 
             pass
     for state_key in state_keys:
         st.session_state[state_key] = ""
-    if include_alpaca:
-        st.session_state["browser_alpaca_message"] = "Saved credentials removed."
-    if include_sec:
-        st.session_state["browser_sec_message"] = "Saved email removed."
+
+
+def erase_selected_credentials(selection: str) -> None:
+    include_sec = selection in ("SEC email", "Both")
+    include_alpaca = selection in ("Alpaca API credentials", "Both")
+    forget_browser_credentials(
+        include_alpaca=include_alpaca,
+        include_sec=include_sec,
+    )
+    if selection == "Both":
+        message = "SEC email and Alpaca credentials were erased from this browser."
+    elif selection == "SEC email":
+        message = "SEC email was erased from this browser."
+    else:
+        message = "Alpaca credentials were erased from this browser."
+    st.session_state["credentials_erased_message"] = message
 
 
 def add_symbol_to_watchlist(symbol: str) -> None:
@@ -341,6 +353,36 @@ Try these options:
         use_container_width=True,
     ):
         st.rerun()
+
+
+@st.dialog("Erase saved credentials?")
+def show_erase_credentials_dialog() -> None:
+    st.warning(
+        "This removes the selected information from this browser. It does not delete or "
+        "change anything in your Alpaca account."
+    )
+    erase_choice = st.radio(
+        "What would you like to erase?",
+        ["SEC email", "Alpaca API credentials", "Both"],
+        key="erase_credentials_choice",
+    )
+    confirm_column, cancel_column = st.columns(2)
+    with confirm_column:
+        st.button(
+            "Erase selected",
+            type="primary",
+            key="confirm_erase_credentials",
+            use_container_width=True,
+            on_click=erase_selected_credentials,
+            args=(erase_choice,),
+        )
+    with cancel_column:
+        if st.button(
+            "Cancel",
+            key="cancel_erase_credentials",
+            use_container_width=True,
+        ):
+            st.rerun()
 
 
 def normalize_symbols_text() -> None:
@@ -3031,7 +3073,8 @@ with alpaca_tab:
 3. Paste them into the protected fields above.
 4. Choose **Save on this Mac** to remember them only in this browser, or leave them
    unsaved to use them for the current session only.
-5. Choose **Forget** whenever you want to remove the saved copy from this browser.
+5. Open **Settings** and choose **Erase Credentials** whenever you want to remove the
+   saved copy from this browser.
 
 Never place the secret directly inside `app.py`, email it, or share it in a screenshot.
             """
@@ -3426,15 +3469,6 @@ with settings_tab:
                             st.query_params.pop("focus", None)
                         except OSError as exc:
                             st.error(str(exc))
-                st.button(
-                    "Forget",
-                    key="forget_browser_sec_email",
-                    use_container_width=True,
-                    on_click=forget_browser_credentials,
-                    kwargs={"include_alpaca": False},
-                )
-                if st.session_state.pop("browser_sec_message", ""):
-                    st.success("Saved email removed.")
             elif st.button(
                 "Save email",
                 key="save_sec_email_default",
@@ -3517,15 +3551,19 @@ with settings_tab:
                             st.success("Saved in this browser.")
                         except OSError as exc:
                             st.error(str(exc))
-                st.button(
-                    "Forget",
-                    key="forget_browser_alpaca",
-                    use_container_width=True,
-                    on_click=forget_browser_credentials,
-                    kwargs={"include_sec": False},
-                )
-                if st.session_state.pop("browser_alpaca_message", ""):
-                    st.success("Saved credentials removed.")
+    if cloud_deployment:
+        st.divider()
+        erase_credentials_column, _ = st.columns([1, 1.35])
+        with erase_credentials_column:
+            if st.button(
+                "Erase Credentials",
+                key="erase_saved_credentials",
+                use_container_width=True,
+            ):
+                show_erase_credentials_dialog()
+        erased_message = st.session_state.pop("credentials_erased_message", "")
+        if erased_message:
+            st.success(erased_message)
 
 if errors:
     with st.expander("Symbols with warnings"):
