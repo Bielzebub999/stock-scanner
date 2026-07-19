@@ -263,7 +263,7 @@ def select_floating_stock() -> None:
     selected_symbol = st.session_state.get("floating_stock_lookup")
     if selected_symbol:
         add_symbol_to_watchlist(selected_symbol)
-        st.session_state["sidebar_stock_search_open"] = False
+        st.session_state["floating_stock_lookup"] = None
 
 
 def select_filtered_stock(symbol: str) -> None:
@@ -1610,42 +1610,45 @@ with st.sidebar.expander("SEC", expanded=False):
                 st.error(f"The SEC email could not be saved: {exc}")
 
 with st.container(key="floating_stock_search"):
-    search_query = st.text_input(
-        "Search stocks",
-        placeholder="Search stocks…",
-        key="floating_stock_search_query",
-        label_visibility="collapsed",
-    ).strip().lower()
-    if search_query:
-        with st.container(key="floating_stock_results"):
-            if not sec_contact_email or "@" not in sec_contact_email:
-                st.caption("Enter your SEC email in Company Research to enable lookup.")
-            else:
-                try:
-                    sidebar_directory = get_sec_company_directory(sec_contact_email)
-                    sidebar_directory = sidebar_directory.drop_duplicates("Ticker")
-                    sidebar_company_names = dict(
-                        zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
-                    )
-                    matching_symbols = [
-                        ticker
-                        for ticker in sidebar_directory["Ticker"].tolist()
-                        if search_query in ticker.lower()
-                        or search_query in sidebar_company_names.get(ticker, "").lower()
-                    ][:8]
-                    if matching_symbols:
-                        for ticker in matching_symbols:
-                            st.button(
-                                f"{ticker}  ·  {sidebar_company_names.get(ticker, '')}",
-                                key=f"floating_search_result_{ticker}",
-                                use_container_width=True,
-                                on_click=select_filtered_stock,
-                                args=(ticker,),
-                            )
-                    else:
-                        st.caption("No matching stocks found.")
-                except Exception:
-                    st.caption("Stock lookup is temporarily unavailable.")
+    if not sec_contact_email or "@" not in sec_contact_email:
+        st.selectbox(
+            "Search stocks",
+            options=[],
+            index=None,
+            placeholder="Enter SEC email first…",
+            key="floating_stock_lookup_disabled",
+            label_visibility="collapsed",
+            disabled=True,
+        )
+    else:
+        try:
+            sidebar_directory = get_sec_company_directory(sec_contact_email)
+            sidebar_directory = sidebar_directory.drop_duplicates("Ticker")
+            sidebar_company_names = dict(
+                zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
+            )
+            st.selectbox(
+                "Search stocks",
+                options=sidebar_directory["Ticker"].tolist(),
+                index=None,
+                placeholder="Search stocks…",
+                format_func=lambda ticker: (
+                    f"{ticker}  ·  {sidebar_company_names.get(ticker, '')}"
+                ),
+                key="floating_stock_lookup",
+                label_visibility="collapsed",
+                on_change=select_floating_stock,
+            )
+        except Exception:
+            st.selectbox(
+                "Search stocks",
+                options=[],
+                index=None,
+                placeholder="Stock lookup unavailable…",
+                key="floating_stock_lookup_unavailable",
+                label_visibility="collapsed",
+                disabled=True,
+            )
 
 st.sidebar.subheader("Momentum settings")
 minimum_volume_spike_percent = st.sidebar.slider(
@@ -1722,16 +1725,9 @@ st.markdown(
         box-shadow: none;
         backdrop-filter: none;
     }
-    .st-key-floating_stock_search div[data-testid="stTextInput"] input {
+    .st-key-floating_stock_search div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         height: 2.35rem;
         min-height: 2.35rem;
-    }
-    .st-key-floating_stock_results {
-        padding: 0.35rem;
-        background: rgba(255, 255, 255, 0.98);
-        border: 1px solid #bfd7f5;
-        border-radius: 0.75rem;
-        box-shadow: 0 14px 35px rgba(30, 58, 138, 0.22);
     }
     .st-key-native_hamburger_navigation {
         position: fixed;
