@@ -6,6 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
 import json
+import os
 import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -58,7 +59,19 @@ TRACKED_13F_MANAGERS = {
 }
 
 
+def is_streamlit_cloud() -> bool:
+    try:
+        host = str(st.context.headers.get("Host", "")).lower().split(":", 1)[0]
+    except Exception:
+        host = ""
+    return host.endswith(".streamlit.app") or os.environ.get(
+        "STREAMLIT_SHARING_MODE", ""
+    ).lower() == "streamlit"
+
+
 def load_preferences() -> dict:
+    if is_streamlit_cloud():
+        return {}
     for preferences_path in (
         PREFERENCES_FILE,
         FALLBACK_PREFERENCES_FILE,
@@ -75,6 +88,8 @@ def load_preferences() -> dict:
 
 
 def write_preferences(preferences: dict) -> None:
+    if is_streamlit_cloud():
+        return
     try:
         PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
         preferences_path = PREFERENCES_FILE
@@ -124,7 +139,9 @@ def add_symbol_to_watchlist(symbol: str) -> None:
         try:
             save_symbol_preferences(updated_text)
             st.session_state["watchlist_message"] = (
-                f"{symbol} was added and your ticker list was saved."
+                f"{symbol} was added for this session."
+                if is_streamlit_cloud()
+                else f"{symbol} was added and your ticker list was saved."
             )
         except OSError as exc:
             st.session_state["watchlist_message"] = (
@@ -162,7 +179,11 @@ def normalize_symbols_text() -> None:
         return
     try:
         save_symbol_preferences(updated_text)
-        st.session_state["watchlist_message"] = "Ticker symbols saved."
+        st.session_state["watchlist_message"] = (
+            "Ticker symbols updated for this session."
+            if is_streamlit_cloud()
+            else "Ticker symbols saved."
+        )
     except OSError as exc:
         st.session_state["watchlist_message"] = f"Ticker symbols could not be saved: {exc}"
 
@@ -187,7 +208,11 @@ def remove_symbols_from_watchlist(symbols_to_remove: list) -> None:
         removed_text = ", ".join(
             symbol for symbol in symbols_to_remove if symbol in current_symbols
         )
-        st.session_state["watchlist_message"] = f"Removed and saved: {removed_text}."
+        st.session_state["watchlist_message"] = (
+            f"Removed for this session: {removed_text}."
+            if is_streamlit_cloud()
+            else f"Removed and saved: {removed_text}."
+        )
     except OSError as exc:
         st.session_state["watchlist_message"] = f"Tickers were removed, but could not be saved: {exc}"
 
@@ -1327,6 +1352,7 @@ st.markdown(
 )
 
 saved_preferences = load_preferences()
+cloud_deployment = is_streamlit_cloud()
 if "symbols_text" not in st.session_state:
     st.session_state["symbols_text"] = saved_preferences.get(
         "symbols",
@@ -1369,7 +1395,7 @@ with st.container(key="floating_stock_search"):
 
     if st.session_state["sidebar_stock_search_open"]:
         if not sec_contact_email or "@" not in sec_contact_email:
-            st.caption("Save your SEC email in Company Research to enable lookup.")
+            st.caption("Enter your SEC email in Company Research to enable lookup.")
         else:
             try:
                 sidebar_directory = get_sec_company_directory(sec_contact_email)
@@ -1430,7 +1456,11 @@ if st.sidebar.button("Run scan again", type="primary", use_container_width=True)
     st.session_state["run_scan"] = True
     try:
         save_symbol_preferences(symbols_text)
-        st.sidebar.success("Ticker symbols saved.")
+        st.sidebar.success(
+            "Ticker symbols updated for this session."
+            if cloud_deployment
+            else "Ticker symbols saved."
+        )
     except OSError as exc:
         st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
 
@@ -1785,7 +1815,11 @@ if st.session_state["selected_main_page"] != "Top 20":
             st.session_state["run_scan"] = True
             try:
                 save_symbol_preferences(symbols_text)
-                st.toast("Ticker symbols saved.")
+                st.toast(
+                    "Ticker symbols updated for this session."
+                    if cloud_deployment
+                    else "Ticker symbols saved."
+                )
             except OSError as exc:
                 st.error(f"Ticker symbols could not be saved: {exc}")
 
@@ -2682,20 +2716,30 @@ with alpaca_tab:
     with alpaca_credentials_column:
         with st.container(key="alpaca_credentials_corner"):
             with st.expander("API", expanded=False):
-                alpaca_key = st.text_input(
-                    "API key",
-                    value=configured_alpaca_key,
-                    type="password",
-                    key="alpaca_api_key",
-                    help="Used only to request quotes from Alpaca.",
-                ).strip()
-                alpaca_secret = st.text_input(
-                    "API secret",
-                    value=configured_alpaca_secret,
-                    type="password",
-                    key="alpaca_api_secret",
-                    help="Do not share this secret.",
-                ).strip()
+                server_credentials_available = bool(
+                    cloud_deployment
+                    and configured_alpaca_key
+                    and configured_alpaca_secret
+                )
+                if server_credentials_available:
+                    alpaca_key = configured_alpaca_key
+                    alpaca_secret = configured_alpaca_secret
+                    st.caption("Alpaca access is configured securely for this app.")
+                else:
+                    alpaca_key = st.text_input(
+                        "API key",
+                        value=configured_alpaca_key if not cloud_deployment else "",
+                        type="password",
+                        key="alpaca_api_key",
+                        help="Used only for this browser session.",
+                    ).strip()
+                    alpaca_secret = st.text_input(
+                        "API secret",
+                        value=configured_alpaca_secret if not cloud_deployment else "",
+                        type="password",
+                        key="alpaca_api_secret",
+                        help="Used only for this browser session.",
+                    ).strip()
                 alpaca_feed_label = st.radio(
                     "Market-data feed",
                     ["IEX — free, one exchange", "SIP — paid, all U.S. exchanges"],
@@ -2898,7 +2942,7 @@ with autopilot_tab:
             key="autopilot_13f_manager",
         )
         if not sec_contact_email or "@" not in sec_contact_email:
-            st.info("Save your SEC contact email in Company research to load 13F holdings.")
+            st.info("Enter your SEC contact email in Company research to load 13F holdings.")
         else:
             try:
                 with st.spinner(f"Loading the latest 13F filing for {manager_name}…"):
@@ -2947,11 +2991,17 @@ with research_tab:
             sec_contact_email = st.text_input(
                 "SEC contact email",
                 placeholder="you@example.com",
-                help="Used only to identify this app's requests to the SEC.",
+                help=(
+                    "Used only for this browser session to identify requests to the SEC."
+                    if cloud_deployment
+                    else "Used only to identify this app's requests to the SEC."
+                ),
                 type="password",
                 key="sec_contact_email",
             ).strip()
-            if st.button("Save email", key="save_sec_email_default"):
+            if cloud_deployment:
+                st.caption("This email is not saved and is private to your current session.")
+            elif st.button("Save email", key="save_sec_email_default"):
                 if not sec_contact_email or "@" not in sec_contact_email:
                     st.error("Enter a valid email address before saving.")
                 else:
