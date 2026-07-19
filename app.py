@@ -266,6 +266,12 @@ def select_floating_stock() -> None:
         st.session_state["sidebar_stock_search_open"] = False
 
 
+def select_filtered_stock(symbol: str) -> None:
+    add_symbol_to_watchlist(symbol)
+    st.session_state["sidebar_stock_search_open"] = False
+    st.session_state["floating_stock_search_query"] = ""
+
+
 def normalize_symbols_text() -> None:
     current_text = st.session_state.get("symbols_text", "")
     normalized = list(dict.fromkeys(
@@ -1535,19 +1541,32 @@ with st.container(key="floating_stock_search"):
                 sidebar_company_names = dict(
                     zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
                 )
-                st.selectbox(
+                search_query = st.text_input(
                     "Search by company name or ticker",
-                    options=sidebar_directory["Ticker"].tolist(),
-                    index=None,
                     placeholder="Search company or ticker…",
-                    format_func=lambda ticker: (
-                        f"{ticker}  ·  {sidebar_company_names.get(ticker, '')}"
-                    ),
-                    key="floating_stock_lookup",
+                    key="floating_stock_search_query",
                     label_visibility="collapsed",
-                    on_change=select_floating_stock,
-                )
-                st.caption("Results filter instantly as you type.")
+                ).strip().lower()
+                if search_query:
+                    matching_symbols = [
+                        ticker
+                        for ticker in sidebar_directory["Ticker"].tolist()
+                        if search_query in ticker.lower()
+                        or search_query in sidebar_company_names.get(ticker, "").lower()
+                    ][:8]
+                    if matching_symbols:
+                        for ticker in matching_symbols:
+                            st.button(
+                                f"{ticker}  ·  {sidebar_company_names.get(ticker, '')}",
+                                key=f"floating_search_result_{ticker}",
+                                use_container_width=True,
+                                on_click=select_filtered_stock,
+                                args=(ticker,),
+                            )
+                    else:
+                        st.caption("No matching stocks found.")
+                else:
+                    st.caption("Results will appear below as you type.")
             except Exception:
                 st.caption("Stock lookup is temporarily unavailable.")
 
