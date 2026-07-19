@@ -1619,13 +1619,16 @@ st.markdown(
         right: auto;
         width: min(24rem, calc(100vw - 2rem));
         z-index: 1000000;
-        padding: 0.6rem;
+        padding: 0;
         margin: 0;
-        background: rgba(255, 255, 255, 0.96);
-        border: 1px solid #bfd7f5;
-        border-radius: 1rem;
-        box-shadow: 0 14px 35px rgba(30, 58, 138, 0.22);
-        backdrop-filter: blur(14px);
+        background: transparent;
+        border: 0;
+        box-shadow: none;
+        backdrop-filter: none;
+    }
+    .st-key-floating_stock_search div[data-testid="stButton"] button {
+        height: 2.35rem;
+        min-height: 2.35rem;
     }
     .st-key-native_hamburger_navigation {
         position: fixed;
