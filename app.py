@@ -1574,7 +1574,6 @@ with st.sidebar.expander("SEC", expanded=False):
             if cloud_deployment
             else "Used only to identify this app's requests to the SEC."
         ),
-        type="password",
         key="sec_contact_email",
     ).strip()
     if cloud_deployment:
