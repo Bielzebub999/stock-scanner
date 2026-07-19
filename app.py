@@ -277,6 +277,30 @@ def select_filtered_stock(symbol: str) -> None:
     st.session_state["floating_stock_search_query"] = ""
 
 
+@st.dialog("SEC email required")
+def show_sec_email_required_dialog() -> None:
+    st.warning(
+        "Stock-name and ticker searches use the SEC company directory. The SEC requires "
+        "a contact email before the app can request that directory."
+    )
+    st.write("Would you like to enter and save your SEC contact email now?")
+    yes_column, cancel_column = st.columns(2)
+    with yes_column:
+        if st.button(
+            "Yes — open Settings",
+            type="primary",
+            key="open_sec_email_settings",
+            use_container_width=True,
+        ):
+            st.session_state["selected_main_page"] = "Settings"
+            st.query_params["page"] = "Settings"
+            st.query_params["focus"] = "sec_email"
+            st.rerun()
+    with cancel_column:
+        if st.button("Cancel", key="cancel_sec_email_settings", use_container_width=True):
+            st.rerun()
+
+
 def normalize_symbols_text() -> None:
     current_text = st.session_state.get("symbols_text", "")
     normalized = list(dict.fromkeys(
@@ -1539,10 +1563,7 @@ with st.container(key="floating_stock_search"):
             key="stock_search_requires_email",
             use_container_width=True,
         ):
-            st.toast(
-                "Add and save your SEC contact email on the Settings page before searching stocks.",
-                icon="⚠️",
-            )
+            show_sec_email_required_dialog()
     else:
         try:
             sidebar_directory = get_sec_company_directory(sec_contact_email)
@@ -1734,7 +1755,11 @@ st.markdown(
         color: #64748b;
         font-size: 0.95rem;
         text-align: center;
-        margin-top: 0.65rem;
+        margin-top: 0.25rem;
+        margin-bottom: 0;
+    }
+    div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
+        margin-bottom: -0.75rem;
     }
     h2, h3 {
         color: #1e3a8a;
@@ -1885,6 +1910,9 @@ st.markdown(
     }
     div[data-baseweb="tab-list"] button {
         flex: 0 0 auto;
+    }
+    div[data-baseweb="tab-panel"] {
+        padding-top: 0.25rem !important;
     }
     div[data-baseweb="tab-list"]::-webkit-scrollbar {
         height: 8px;
@@ -3309,6 +3337,73 @@ with research_tab:
         )
 
 with settings_tab:
+    if st.query_params.get("focus") == "sec_email":
+        st.info("Enter your SEC contact email below, then choose Save on this Mac.")
+    sec_explanation_column, sec_form_column = st.columns([1.35, 1])
+    with sec_explanation_column:
+        st.markdown("### SEC search access")
+        st.write(
+            "The SEC asks automated tools to identify themselves with contact information. "
+            "The scanner uses this email only in the User-Agent sent with requests to SEC.gov. "
+            "It is not used to create an SEC account, subscribe you to email, or contact your friend."
+        )
+        st.write(
+            "A valid email is also required to download the official SEC company directory that "
+            "powers the stock-name and ticker search at the top of the app."
+        )
+        st.caption(
+            "Use an email address you monitor. Each person should enter and save their own email "
+            "on their own Mac."
+        )
+    with sec_form_column:
+        with st.container(border=True):
+            st.markdown("#### SEC contact email")
+            sec_contact_email = st.text_input(
+                "Email address",
+                placeholder="you@example.com",
+                help="Saved only in this browser when you choose Save on this Mac.",
+                key="sec_contact_email",
+            ).strip()
+            if cloud_deployment:
+                if st.button(
+                    "Save on this Mac",
+                    key="save_browser_sec_email",
+                    use_container_width=True,
+                ):
+                    if not sec_contact_email or "@" not in sec_contact_email:
+                        st.error("Enter a valid email address before saving.")
+                    else:
+                        try:
+                            save_browser_credentials(sec_contact_email=sec_contact_email)
+                            st.success("Saved in this browser.")
+                            st.query_params.pop("focus", None)
+                        except OSError as exc:
+                            st.error(str(exc))
+                st.button(
+                    "Forget",
+                    key="forget_browser_sec_email",
+                    use_container_width=True,
+                    on_click=forget_browser_credentials,
+                    kwargs={"include_alpaca": False},
+                )
+                if st.session_state.pop("browser_sec_message", ""):
+                    st.success("Saved email removed.")
+            elif st.button(
+                "Save email",
+                key="save_sec_email_default",
+                use_container_width=True,
+            ):
+                if not sec_contact_email or "@" not in sec_contact_email:
+                    st.error("Enter a valid email address before saving.")
+                else:
+                    try:
+                        save_email_preference(sec_contact_email)
+                        st.success("SEC email saved as the default.")
+                        st.query_params.pop("focus", None)
+                    except OSError as exc:
+                        st.error(f"The SEC email could not be saved: {exc}")
+
+    st.divider()
     alpaca_instructions_column, alpaca_form_column = st.columns([1.35, 1])
     with alpaca_instructions_column:
         st.markdown("### Alpaca market-data access")
@@ -3384,69 +3479,6 @@ with settings_tab:
                 )
                 if st.session_state.pop("browser_alpaca_message", ""):
                     st.success("Saved credentials removed.")
-
-    st.divider()
-    sec_explanation_column, sec_form_column = st.columns([1.35, 1])
-    with sec_explanation_column:
-        st.markdown("### SEC search access")
-        st.write(
-            "The SEC asks automated tools to identify themselves with contact information. "
-            "The scanner uses this email only in the User-Agent sent with requests to SEC.gov. "
-            "It is not used to create an SEC account, subscribe you to email, or contact your friend."
-        )
-        st.write(
-            "A valid email is also required to download the official SEC company directory that "
-            "powers the stock-name and ticker search at the top of the app."
-        )
-        st.caption(
-            "Use an email address you monitor. Each person should enter and save their own email "
-            "on their own Mac."
-        )
-    with sec_form_column:
-        with st.container(border=True):
-            st.markdown("#### SEC contact email")
-            sec_contact_email = st.text_input(
-                "Email address",
-                placeholder="you@example.com",
-                help="Saved only in this browser when you choose Save on this Mac.",
-                key="sec_contact_email",
-            ).strip()
-            if cloud_deployment:
-                if st.button(
-                    "Save on this Mac",
-                    key="save_browser_sec_email",
-                    use_container_width=True,
-                ):
-                    if not sec_contact_email or "@" not in sec_contact_email:
-                        st.error("Enter a valid email address before saving.")
-                    else:
-                        try:
-                            save_browser_credentials(sec_contact_email=sec_contact_email)
-                            st.success("Saved in this browser.")
-                        except OSError as exc:
-                            st.error(str(exc))
-                st.button(
-                    "Forget",
-                    key="forget_browser_sec_email",
-                    use_container_width=True,
-                    on_click=forget_browser_credentials,
-                    kwargs={"include_alpaca": False},
-                )
-                if st.session_state.pop("browser_sec_message", ""):
-                    st.success("Saved email removed.")
-            elif st.button(
-                "Save email",
-                key="save_sec_email_default",
-                use_container_width=True,
-            ):
-                if not sec_contact_email or "@" not in sec_contact_email:
-                    st.error("Enter a valid email address before saving.")
-                else:
-                    try:
-                        save_email_preference(sec_contact_email)
-                        st.success("SEC email saved as the default.")
-                    except OSError as exc:
-                        st.error(f"The SEC email could not be saved: {exc}")
 
 if errors:
     with st.expander("Symbols with warnings"):
