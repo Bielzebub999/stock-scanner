@@ -1527,17 +1527,17 @@ with st.container(key="floating_stock_search"):
         key="floating_stock_search_query",
         label_visibility="collapsed",
     ).strip().lower()
-    with st.container(key="floating_stock_results"):
-        if not sec_contact_email or "@" not in sec_contact_email:
-            st.caption("Enter your SEC email in Company Research to enable lookup.")
-        else:
-            try:
-                sidebar_directory = get_sec_company_directory(sec_contact_email)
-                sidebar_directory = sidebar_directory.drop_duplicates("Ticker")
-                sidebar_company_names = dict(
-                    zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
-                )
-                if search_query:
+    if search_query:
+        with st.container(key="floating_stock_results"):
+            if not sec_contact_email or "@" not in sec_contact_email:
+                st.caption("Enter your SEC email in Company Research to enable lookup.")
+            else:
+                try:
+                    sidebar_directory = get_sec_company_directory(sec_contact_email)
+                    sidebar_directory = sidebar_directory.drop_duplicates("Ticker")
+                    sidebar_company_names = dict(
+                        zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
+                    )
                     matching_symbols = [
                         ticker
                         for ticker in sidebar_directory["Ticker"].tolist()
@@ -1555,10 +1555,8 @@ with st.container(key="floating_stock_search"):
                             )
                     else:
                         st.caption("No matching stocks found.")
-                else:
-                    st.caption("Type a company name or ticker.")
-            except Exception:
-                st.caption("Stock lookup is temporarily unavailable.")
+                except Exception:
+                    st.caption("Stock lookup is temporarily unavailable.")
 
 st.sidebar.subheader("Momentum settings")
 minimum_volume_spike_percent = st.sidebar.slider(
@@ -1640,15 +1638,11 @@ st.markdown(
         min-height: 2.35rem;
     }
     .st-key-floating_stock_results {
-        display: none;
         padding: 0.35rem;
         background: rgba(255, 255, 255, 0.98);
         border: 1px solid #bfd7f5;
         border-radius: 0.75rem;
         box-shadow: 0 14px 35px rgba(30, 58, 138, 0.22);
-    }
-    .st-key-floating_stock_search:focus-within .st-key-floating_stock_results {
-        display: block;
     }
     .st-key-native_hamburger_navigation {
         position: fixed;
