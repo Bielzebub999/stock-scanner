@@ -355,6 +355,36 @@ Try these options:
         st.rerun()
 
 
+@st.dialog("⚠️ Alpaca credentials required")
+def show_alpaca_credentials_required_dialog() -> None:
+    st.warning(
+        "The Alpaca Live Market Data page needs both an Alpaca API key and API secret."
+    )
+    st.write("Would you like to enter and save your Alpaca credentials now?")
+    yes_column, cancel_column = st.columns(2)
+    with yes_column:
+        if st.button(
+            "Yes — open Settings",
+            type="primary",
+            key="open_alpaca_settings",
+            use_container_width=True,
+        ):
+            st.session_state["selected_main_page"] = "Settings"
+            st.query_params["page"] = "Settings"
+            st.query_params["focus"] = "alpaca"
+            st.rerun()
+    with cancel_column:
+        if st.button(
+            "Cancel",
+            key="cancel_alpaca_settings",
+            use_container_width=True,
+        ):
+            st.session_state["selected_main_page"] = "My Watchlist"
+            st.query_params["page"] = "My Watchlist"
+            st.query_params.pop("focus", None)
+            st.rerun()
+
+
 @st.dialog("Erase saved credentials?")
 def show_erase_credentials_dialog() -> None:
     st.warning(
@@ -1653,6 +1683,7 @@ alpaca_key = st.session_state.get("alpaca_api_key", "").strip()
 alpaca_secret = st.session_state.get("alpaca_api_secret", "").strip()
 alpaca_feed_label = st.session_state.get("alpaca_feed", "IEX — free, one exchange")
 alpaca_feed = "sip" if alpaca_feed_label.startswith("SIP") else "iex"
+alpaca_credentials_missing = not alpaca_key or not alpaca_secret
 sec_contact_email = st.session_state.get("sec_contact_email", "").strip()
 
 with st.container(key="floating_stock_search"):
@@ -1698,11 +1729,21 @@ with st.container(key="floating_stock_search"):
                 key="stock_search_unavailable",
                 use_container_width=True,
             )
-            if open_lookup_warning or not st.session_state.get(
-                "stock_lookup_warning_shown", False
+            if open_lookup_warning or (
+                not st.session_state.get("stock_lookup_warning_shown", False)
+                and not (
+                    st.session_state["selected_main_page"] == "Alpaca Live Market Data"
+                    and alpaca_credentials_missing
+                )
             ):
                 st.session_state["stock_lookup_warning_shown"] = True
                 show_stock_lookup_unavailable_dialog()
+
+if (
+    st.session_state["selected_main_page"] == "Alpaca Live Market Data"
+    and alpaca_credentials_missing
+):
+    show_alpaca_credentials_required_dialog()
 
 st.sidebar.subheader("Momentum settings")
 minimum_volume_spike_percent = st.sidebar.slider(
@@ -3462,6 +3503,11 @@ with research_tab:
         )
 
 with settings_tab:
+    if st.query_params.get("focus") == "alpaca":
+        st.info(
+            "Enter both Alpaca credentials in the Alpaca section below, then choose "
+            "Save on this Mac."
+        )
     if st.query_params.get("focus") == "sec_email":
         st.info("Enter your SEC contact email below, then choose Save on this Mac.")
     sec_explanation_column, sec_form_column = st.columns([1.35, 1])
