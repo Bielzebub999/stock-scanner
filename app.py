@@ -1520,18 +1520,13 @@ if "watchlist_message" in st.session_state:
     st.toast(st.session_state.pop("watchlist_message"))
 sec_contact_email = st.session_state["sec_contact_email"].strip()
 
-if "sidebar_stock_search_open" not in st.session_state:
-    st.session_state["sidebar_stock_search_open"] = False
-
 with st.container(key="floating_stock_search"):
-    st.button(
-        "Close stock search" if st.session_state["sidebar_stock_search_open"] else "Search stocks",
-        icon=":material/close:" if st.session_state["sidebar_stock_search_open"] else ":material/search:",
+    with st.popover(
+        "Search stocks",
+        icon=":material/search:",
         use_container_width=True,
-        on_click=toggle_sidebar_stock_search,
-    )
-
-    if st.session_state["sidebar_stock_search_open"]:
+        help="Search by company name or ticker",
+    ):
         if not sec_contact_email or "@" not in sec_contact_email:
             st.caption("Enter your SEC email in Company Research to enable lookup.")
         else:
@@ -1646,6 +1641,10 @@ st.markdown(
         backdrop-filter: none;
     }
     .st-key-floating_stock_search div[data-testid="stButton"] button {
+        height: 2.35rem;
+        min-height: 2.35rem;
+    }
+    .st-key-floating_stock_search div[data-testid="stPopover"] > button {
         height: 2.35rem;
         min-height: 2.35rem;
     }
