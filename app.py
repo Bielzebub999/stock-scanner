@@ -260,8 +260,9 @@ def toggle_sidebar_stock_search() -> None:
 
 
 def select_floating_stock() -> None:
-    selected_symbol = st.session_state.get("floating_stock_lookup")
-    if selected_symbol:
+    selected_stock = st.session_state.get("floating_stock_lookup")
+    if selected_stock:
+        selected_symbol = str(selected_stock).split(" · ", 1)[0].strip()
         add_symbol_to_watchlist(selected_symbol)
         st.session_state["floating_stock_lookup"] = None
 
@@ -1627,14 +1628,15 @@ with st.container(key="floating_stock_search"):
             sidebar_company_names = dict(
                 zip(sidebar_directory["Ticker"], sidebar_directory["Company"])
             )
+            sidebar_search_options = [
+                f"{ticker} · {sidebar_company_names.get(ticker, '')}"
+                for ticker in sidebar_directory["Ticker"].tolist()
+            ]
             st.selectbox(
                 "Search stocks",
-                options=sidebar_directory["Ticker"].tolist(),
+                options=sidebar_search_options,
                 index=None,
                 placeholder="Search stocks…",
-                format_func=lambda ticker: (
-                    f"{ticker}  ·  {sidebar_company_names.get(ticker, '')}"
-                ),
                 key="floating_stock_lookup",
                 label_visibility="collapsed",
                 on_change=select_floating_stock,
