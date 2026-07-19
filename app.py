@@ -1910,7 +1910,7 @@ st.html(
         font-size: 0.95rem;
         text-align: center;
         margin-top: -2.5rem;
-        margin-bottom: -2.5rem;
+        !margin-bottom: -2.5rem;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
         margin-bottom: 0rem !important;
