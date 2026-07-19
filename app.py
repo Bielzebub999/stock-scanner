@@ -1856,7 +1856,7 @@ st.html(
         margin-bottom: 0;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
-        margin-bottom: -0.75rem;
+        margin-bottom: -1.25rem;
     }
     h2, h3 {
         color: #1e3a8a;
@@ -2009,7 +2009,7 @@ st.html(
         flex: 0 0 auto;
     }
     div[data-baseweb="tab-panel"] {
-        padding-top: 0.25rem !important;
+        padding-top: 0 !important;
     }
     div[data-baseweb="tab-list"]::-webkit-scrollbar {
         height: 8px;
@@ -2019,6 +2019,11 @@ st.html(
         border-radius: 999px;
     }
     /* Hide only the top-level page tabs; the hamburger is the page navigation. */
+    div[data-testid="stMainBlockContainer"]
+        > div[data-testid="stVerticalBlock"]
+        > div[data-testid="stTabs"] {
+        margin-top: -0.5rem !important;
+    }
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"]
         > div[data-testid="stTabs"]
@@ -3434,6 +3439,18 @@ with research_tab:
         )
 
 with settings_tab:
+    if cloud_deployment:
+        _, erase_credentials_column, _ = st.columns([1, 1.2, 1])
+        with erase_credentials_column:
+            if st.button(
+                "Erase Credentials",
+                key="erase_saved_credentials",
+                use_container_width=True,
+            ):
+                show_erase_credentials_dialog()
+        erased_message = st.session_state.pop("credentials_erased_message", "")
+        if erased_message:
+            st.success(erased_message)
     if st.query_params.get("focus") == "sec_email":
         st.info("Enter your SEC contact email below, then choose Save on this Mac.")
     sec_explanation_column, sec_form_column = st.columns([1.35, 1])
@@ -3558,20 +3575,6 @@ with settings_tab:
                             st.success("Saved in this browser.")
                         except OSError as exc:
                             st.error(str(exc))
-    if cloud_deployment:
-        st.divider()
-        erase_credentials_column, _ = st.columns([1, 1.35])
-        with erase_credentials_column:
-            if st.button(
-                "Erase Credentials",
-                key="erase_saved_credentials",
-                use_container_width=True,
-            ):
-                show_erase_credentials_dialog()
-        erased_message = st.session_state.pop("credentials_erased_message", "")
-        if erased_message:
-            st.success(erased_message)
-
 if errors:
     with st.expander("Symbols with warnings"):
         st.write(errors)
