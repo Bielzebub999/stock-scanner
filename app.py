@@ -1913,14 +1913,10 @@ st.html(
         margin-bottom: 0;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
-        margin-bottom: -1.6rem;
+        margin-bottom: -1.1rem;
     }
     .st-key-header_erase_credentials {
-        margin-top: 2.35rem;
-    }
-    div[data-testid="stMainBlockContainer"]
-        > div[data-testid="stVerticalBlock"] {
-        gap: 0.3rem !important;
+        margin-top: 1.75rem;
     }
     h2, h3 {
         color: #1e3a8a;
@@ -2086,7 +2082,7 @@ st.html(
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"]
         > div[data-testid="stTabs"] {
-        margin-top: -0.75rem !important;
+        margin-top: -0.25rem !important;
     }
     div[data-testid="stMainBlockContainer"]
         > div[data-testid="stVerticalBlock"]
