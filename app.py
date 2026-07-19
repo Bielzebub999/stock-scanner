@@ -1909,12 +1909,17 @@ st.html(
         color: #64748b;
         font-size: 0.95rem;
         text-align: center;
-        margin-top: 0.25rem;
+        margin-top: -2.5rem;
         margin-bottom: 0;
     }
     div[data-testid="stElementContainer"]:has(.scanner-main-subtitle) {
-        margin-bottom: -1.1rem;
+        margin-bottom: 0rem !important;
+	padding-bottom: 0rem !important;
     }
+	
+    div[data-testid="stVerticalBlock"] {
+ 	gap: 0.5rem !important; /* Reduces the universal gap between ALL elements */
+}
     .st-key-header_erase_credentials {
         margin-top: 1.75rem;
     }
