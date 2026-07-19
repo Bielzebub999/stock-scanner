@@ -1,0 +1,94 @@
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+  #stock-search { position: relative; width: 100%; }
+  input {
+    width: 100%; height: 38px; padding: 0 12px; border: 1px solid #c7d2e0;
+    border-radius: 8px; font-size: 16px; background: #fff; color: #172033;
+  }
+  input:focus { border-color: #2684ff; outline: 2px solid rgba(38,132,255,.18); }
+  #results {
+    display: none; margin-top: 6px; padding: 6px; background: #fff;
+    border: 1px solid #bfd7f5; border-radius: 10px;
+    box-shadow: 0 14px 35px rgba(30,58,138,.22);
+  }
+  button {
+    display: block; width: 100%; min-height: 42px; margin: 0 0 5px; padding: 8px 10px;
+    border: 1px solid #9bc5ff; border-radius: 8px; background: #fff; color: #172033;
+    font-size: 15px; text-align: center; cursor: pointer;
+  }
+  button:last-child { margin-bottom: 0; }
+  button:hover, button:focus { background: #eef6ff; outline: none; }
+  .empty { padding: 10px; color: #526174; font-size: 14px; text-align: center; }
+</style>
+<div id="stock-search">
+  <input id="query" type="search" placeholder="Search stocks…" autocomplete="off"
+    aria-label="Search stocks by ticker or company name">
+  <div id="results" role="listbox" aria-label="Matching stocks"></div>
+</div>
+<script>
+(() => {
+  const input = document.getElementById("query");
+  const results = document.getElementById("results");
+  let options = [];
+
+  const send = (type, extra = {}) => window.parent.postMessage({
+    isStreamlitMessage: true,
+    type,
+    ...extra
+  }, "*");
+
+  const setHeight = (height) => send("streamlit:setFrameHeight", { height });
+
+  const closeResults = () => {
+    results.style.display = "none";
+    results.innerHTML = "";
+    setHeight(44);
+  };
+
+  const choose = (ticker) => {
+    input.value = "";
+    closeResults();
+    send("streamlit:setComponentValue", { value: ticker });
+  };
+
+  const renderMatches = () => {
+    const needle = input.value.trim().toLowerCase();
+    if (!needle) {
+      closeResults();
+      return;
+    }
+    const matches = options.filter(item => item.search.toLowerCase().includes(needle)).slice(0, 8);
+    results.innerHTML = "";
+    if (!matches.length) {
+      const empty = document.createElement("div");
+      empty.className = "empty";
+      empty.textContent = "No matching stocks found.";
+      results.appendChild(empty);
+    } else {
+      matches.forEach(item => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = item.label;
+        button.addEventListener("mousedown", event => event.preventDefault());
+        button.addEventListener("click", () => choose(item.ticker));
+        results.appendChild(button);
+      });
+    }
+    results.style.display = "block";
+    setHeight(Math.min(430, 50 + results.scrollHeight));
+  };
+
+  input.addEventListener("input", renderMatches);
+  window.addEventListener("blur", closeResults);
+  window.addEventListener("message", event => {
+    if (event.data?.type !== "streamlit:render") return;
+    options = Array.isArray(event.data.args?.options) ? event.data.args.options : [];
+    input.placeholder = event.data.args?.placeholder || "Search stocks…";
+    setHeight(44);
+  });
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  setHeight(44);
+})();
+</script>
