@@ -1733,7 +1733,7 @@ if st.sidebar.button("Run scan again", type="primary", use_container_width=True)
     except OSError as exc:
         st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
 
-st.markdown(
+st.html(
     """
     <style>
     .stApp {
@@ -1762,6 +1762,14 @@ st.markdown(
         border: 0;
         box-shadow: none;
         backdrop-filter: none;
+    }
+    div[data-testid="stElementContainer"]:has(.st-key-floating_stock_search),
+    div[data-testid="stElementContainer"]:has(.st-key-native_hamburger_navigation),
+    div[data-testid="stElementContainer"]:has(.st-key-floating_scan_controls) {
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .st-key-floating_stock_search div[data-testid="stSelectbox"] div[data-baseweb="select"] > div {
         height: 2.35rem;
@@ -2093,7 +2101,6 @@ st.markdown(
     }
     </style>
     """,
-    unsafe_allow_html=True,
 )
 if st.session_state["selected_main_page"] != "Top 20":
     with st.container(key="floating_scan_controls"):
@@ -2120,7 +2127,7 @@ results = []
 histories = {}
 premarket_results = []
 errors = []
-progress = st.progress(0, text="Starting scan…")
+progress = st.sidebar.progress(0, text="Starting scan…")
 
 for index, symbol in enumerate(symbols):
     try:
