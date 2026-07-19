@@ -2014,7 +2014,7 @@ div[data-testid="stVerticalBlock"] {
         padding: 0 !important;
     }
     .st-key-hamburger_menu_links div[data-testid="stVerticalBlock"] {
-        gap: 0.05rem !important;
+        gap: 0.12rem !important;
     }
     .st-key-hamburger_menu_links .scanner-menu-link:hover {
         color: #1d4ed8 !important;
