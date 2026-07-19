@@ -277,7 +277,7 @@ def select_filtered_stock(symbol: str) -> None:
     st.session_state["floating_stock_search_query"] = ""
 
 
-@st.dialog("SEC email required")
+@st.dialog("⚠️ SEC email required")
 def show_sec_email_required_dialog() -> None:
     st.warning(
         "Stock-name and ticker searches use the SEC company directory. The SEC requires "
@@ -299,6 +299,48 @@ def show_sec_email_required_dialog() -> None:
     with cancel_column:
         if st.button("Cancel", key="cancel_sec_email_settings", use_container_width=True):
             st.rerun()
+
+
+@st.dialog("⚠️ Stock lookup unavailable")
+def show_stock_lookup_unavailable_dialog() -> None:
+    st.warning(
+        "The app could not download the company-and-ticker directory from SEC.gov. "
+        "This can happen if the saved email needs attention or the SEC is temporarily unavailable."
+    )
+    st.markdown(
+        """
+Try these options:
+
+1. Choose **Try Again** to make a fresh request.
+2. If it still fails, choose **Open Settings** and confirm that your SEC contact email is correct and saved.
+3. If SEC.gov is temporarily unavailable, wait a few minutes and try again.
+        """
+    )
+    if st.button(
+        "Try Again",
+        type="primary",
+        key="retry_stock_lookup",
+        use_container_width=True,
+    ):
+        get_sec_company_records.clear()
+        get_sec_company_directory.clear()
+        st.session_state["stock_lookup_warning_shown"] = False
+        st.rerun()
+    if st.button(
+        "Open Settings",
+        key="open_stock_lookup_settings",
+        use_container_width=True,
+    ):
+        st.session_state["selected_main_page"] = "Settings"
+        st.query_params["page"] = "Settings"
+        st.query_params["focus"] = "sec_email"
+        st.rerun()
+    if st.button(
+        "Cancel",
+        key="cancel_stock_lookup_warning",
+        use_container_width=True,
+    ):
+        st.rerun()
 
 
 def normalize_symbols_text() -> None:
@@ -1586,18 +1628,23 @@ with st.container(key="floating_stock_search"):
                 key=f"live_stock_search_{search_version}",
                 default=None,
             )
+            st.session_state["stock_lookup_warning_shown"] = False
             if selected_search_symbol:
                 add_symbol_to_watchlist(str(selected_search_symbol))
                 st.session_state["live_stock_search_version"] = search_version + 1
                 st.rerun()
         except Exception:
-            st.button(
+            open_lookup_warning = st.button(
                 "Stock lookup unavailable",
                 icon=":material/search_off:",
                 key="stock_search_unavailable",
                 use_container_width=True,
-                disabled=True,
             )
+            if open_lookup_warning or not st.session_state.get(
+                "stock_lookup_warning_shown", False
+            ):
+                st.session_state["stock_lookup_warning_shown"] = True
+                show_stock_lookup_unavailable_dialog()
 
 st.sidebar.subheader("Momentum settings")
 minimum_volume_spike_percent = st.sidebar.slider(
