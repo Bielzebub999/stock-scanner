@@ -80,12 +80,12 @@
   };
 
   input.addEventListener("input", renderMatches);
-  window.addEventListener("blur", closeResults);
   window.addEventListener("message", event => {
     if (event.data?.type !== "streamlit:render") return;
     options = Array.isArray(event.data.args?.options) ? event.data.args.options : [];
     input.placeholder = event.data.args?.placeholder || "Search stocks…";
-    setHeight(44);
+    if (input.value.trim()) renderMatches();
+    else setHeight(44);
   });
 
   send("streamlit:componentReady", { apiVersion: 1 });
