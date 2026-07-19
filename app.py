@@ -36,6 +36,9 @@ PREFERENCES_FILE = (
 )
 FALLBACK_PREFERENCES_FILE = Path("/tmp/local.educational.stock-scanner-preferences.json")
 BROWSER_WATCHLIST_COOKIE = "stock_scanner_watchlist"
+BROWSER_ALPACA_KEY_COOKIE = "stock_scanner_alpaca_key"
+BROWSER_ALPACA_SECRET_COOKIE = "stock_scanner_alpaca_secret"
+BROWSER_SEC_EMAIL_COOKIE = "stock_scanner_sec_email"
 browser_cookie_manager = None
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
@@ -79,6 +82,7 @@ def is_streamlit_cloud() -> bool:
 
 def load_preferences() -> dict:
     if is_streamlit_cloud():
+        browser_preferences = {}
         if browser_cookie_manager is not None:
             try:
                 saved_symbols = browser_cookie_manager.get(
@@ -86,10 +90,25 @@ def load_preferences() -> dict:
                 )
                 if saved_symbols:
                     st.session_state["_browser_watchlist_cookie"] = saved_symbols
-                    return {"symbols": saved_symbols}
+                    browser_preferences["symbols"] = saved_symbols
+                saved_alpaca_key = browser_cookie_manager.get(
+                    cookie=BROWSER_ALPACA_KEY_COOKIE
+                )
+                saved_alpaca_secret = browser_cookie_manager.get(
+                    cookie=BROWSER_ALPACA_SECRET_COOKIE
+                )
+                saved_sec_email = browser_cookie_manager.get(
+                    cookie=BROWSER_SEC_EMAIL_COOKIE
+                )
+                if saved_alpaca_key:
+                    browser_preferences["alpaca_api_key"] = saved_alpaca_key
+                if saved_alpaca_secret:
+                    browser_preferences["alpaca_api_secret"] = saved_alpaca_secret
+                if saved_sec_email:
+                    browser_preferences["sec_contact_email"] = saved_sec_email
             except Exception:
                 pass
-        return {}
+        return browser_preferences
     for preferences_path in (
         PREFERENCES_FILE,
         FALLBACK_PREFERENCES_FILE,
@@ -156,6 +175,55 @@ def save_email_preference(sec_contact_email: str) -> None:
     preferences = load_preferences()
     preferences["sec_contact_email"] = sec_contact_email
     write_preferences(preferences)
+
+
+def save_browser_credentials(
+    alpaca_api_key: str = "",
+    alpaca_api_secret: str = "",
+    sec_contact_email: str = "",
+) -> None:
+    if browser_cookie_manager is None:
+        raise OSError("Browser storage is unavailable.")
+    expiration = datetime.datetime.now() + datetime.timedelta(days=365)
+    values = {
+        BROWSER_ALPACA_KEY_COOKIE: alpaca_api_key,
+        BROWSER_ALPACA_SECRET_COOKIE: alpaca_api_secret,
+        BROWSER_SEC_EMAIL_COOKIE: sec_contact_email,
+    }
+    for cookie_name, cookie_value in values.items():
+        if cookie_value:
+            browser_cookie_manager.set(
+                cookie_name,
+                cookie_value,
+                key=f"save_{cookie_name}",
+                expires_at=expiration,
+                secure=True,
+                same_site="strict",
+            )
+
+
+def forget_browser_credentials(include_alpaca: bool = True, include_sec: bool = True) -> None:
+    if browser_cookie_manager is None:
+        return
+    cookie_names = []
+    state_keys = []
+    if include_alpaca:
+        cookie_names.extend((BROWSER_ALPACA_KEY_COOKIE, BROWSER_ALPACA_SECRET_COOKIE))
+        state_keys.extend(("alpaca_api_key", "alpaca_api_secret"))
+    if include_sec:
+        cookie_names.append(BROWSER_SEC_EMAIL_COOKIE)
+        state_keys.append("sec_contact_email")
+    for cookie_name in cookie_names:
+        try:
+            browser_cookie_manager.delete(cookie_name, key=f"forget_{cookie_name}")
+        except Exception:
+            pass
+    for state_key in state_keys:
+        st.session_state[state_key] = ""
+    if include_alpaca:
+        st.session_state["browser_alpaca_message"] = "Saved credentials removed."
+    if include_sec:
+        st.session_state["browser_sec_message"] = "Saved email removed."
 
 
 def add_symbol_to_watchlist(symbol: str) -> None:
@@ -1388,14 +1456,6 @@ st.markdown(
 
 saved_preferences = load_preferences()
 cloud_deployment = is_streamlit_cloud()
-configured_sec_contact_email = ""
-if cloud_deployment:
-    try:
-        configured_sec_contact_email = str(
-            st.secrets.get("SEC_CONTACT_EMAIL", "")
-        ).strip()
-    except Exception:
-        configured_sec_contact_email = ""
 saved_browser_symbols = saved_preferences.get("symbols", "")
 if (
     "symbols_text" not in st.session_state
@@ -1411,8 +1471,27 @@ if (
     )
 if cloud_deployment and saved_browser_symbols:
     st.session_state["_browser_watchlist_loaded"] = True
-if "sec_contact_email" not in st.session_state:
+saved_browser_alpaca_key = saved_preferences.get("alpaca_api_key", "")
+saved_browser_alpaca_secret = saved_preferences.get("alpaca_api_secret", "")
+saved_browser_sec_email = saved_preferences.get("sec_contact_email", "")
+browser_credentials_available = bool(
+    saved_browser_alpaca_key
+    or saved_browser_alpaca_secret
+    or saved_browser_sec_email
+)
+load_browser_credentials = bool(
+    cloud_deployment
+    and browser_credentials_available
+    and not st.session_state.get("_browser_credentials_loaded", False)
+)
+if "sec_contact_email" not in st.session_state or load_browser_credentials:
     st.session_state["sec_contact_email"] = saved_preferences.get("sec_contact_email", "")
+if "alpaca_api_key" not in st.session_state or load_browser_credentials:
+    st.session_state["alpaca_api_key"] = saved_preferences.get("alpaca_api_key", "")
+if "alpaca_api_secret" not in st.session_state or load_browser_credentials:
+    st.session_state["alpaca_api_secret"] = saved_preferences.get("alpaca_api_secret", "")
+if load_browser_credentials:
+    st.session_state["_browser_credentials_loaded"] = True
 
 symbols_text = st.sidebar.text_area(
     "Symbols (separated by commas)",
@@ -1433,10 +1512,7 @@ if symbols and normalized_symbols_text != saved_preferences.get("symbols", ""):
         st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
 if "watchlist_message" in st.session_state:
     st.toast(st.session_state.pop("watchlist_message"))
-sec_contact_email = (
-    configured_sec_contact_email
-    or st.session_state["sec_contact_email"].strip()
-)
+sec_contact_email = st.session_state["sec_contact_email"].strip()
 
 if "sidebar_stock_search_open" not in st.session_state:
     st.session_state["sidebar_stock_search_open"] = False
@@ -2759,17 +2835,6 @@ with all_tab:
     )
 
 with alpaca_tab:
-    try:
-        try:
-            configured_alpaca_key = str(st.secrets.get("ALPACA_API_KEY", ""))
-            configured_alpaca_secret = str(st.secrets.get("ALPACA_API_SECRET", ""))
-        except FileNotFoundError:
-            configured_alpaca_key = ""
-            configured_alpaca_secret = ""
-    except Exception:
-        configured_alpaca_key = ""
-        configured_alpaca_secret = ""
-
     alpaca_heading_column, alpaca_credentials_column = st.columns([5, 1.15])
     with alpaca_heading_column:
         st.caption(
@@ -2779,30 +2844,42 @@ with alpaca_tab:
     with alpaca_credentials_column:
         with st.container(key="alpaca_credentials_corner"):
             with st.expander("API", expanded=False):
-                server_credentials_available = bool(
-                    cloud_deployment
-                    and configured_alpaca_key
-                    and configured_alpaca_secret
-                )
-                if server_credentials_available:
-                    alpaca_key = configured_alpaca_key
-                    alpaca_secret = configured_alpaca_secret
-                    st.caption("Alpaca access is configured securely for this app.")
-                else:
-                    alpaca_key = st.text_input(
-                        "API key",
-                        value=configured_alpaca_key if not cloud_deployment else "",
-                        type="password",
-                        key="alpaca_api_key",
-                        help="Used only for this browser session.",
-                    ).strip()
-                    alpaca_secret = st.text_input(
-                        "API secret",
-                        value=configured_alpaca_secret if not cloud_deployment else "",
-                        type="password",
-                        key="alpaca_api_secret",
-                        help="Used only for this browser session.",
-                    ).strip()
+                alpaca_key = st.text_input(
+                    "API key",
+                    type="password",
+                    key="alpaca_api_key",
+                    help="Saved only in this browser when you choose Save on this Mac.",
+                ).strip()
+                alpaca_secret = st.text_input(
+                    "API secret",
+                    type="password",
+                    key="alpaca_api_secret",
+                    help="Saved only in this browser when you choose Save on this Mac.",
+                ).strip()
+                if cloud_deployment:
+                    save_api_column, forget_api_column = st.columns(2)
+                    with save_api_column:
+                        if st.button("Save on this Mac", key="save_browser_alpaca"):
+                            if not alpaca_key or not alpaca_secret:
+                                st.error("Enter both Alpaca credentials before saving.")
+                            else:
+                                try:
+                                    save_browser_credentials(
+                                        alpaca_api_key=alpaca_key,
+                                        alpaca_api_secret=alpaca_secret,
+                                    )
+                                    st.success("Saved in this browser.")
+                                except OSError as exc:
+                                    st.error(str(exc))
+                    with forget_api_column:
+                        st.button(
+                            "Forget",
+                            key="forget_browser_alpaca",
+                            on_click=forget_browser_credentials,
+                            kwargs={"include_sec": False},
+                        )
+                    if st.session_state.pop("browser_alpaca_message", ""):
+                        st.success("Saved credentials removed.")
                 alpaca_feed_label = st.radio(
                     "Market-data feed",
                     ["IEX — free, one exchange", "SIP — paid, all U.S. exchanges"],
@@ -2887,14 +2964,15 @@ with alpaca_tab:
             "IEX volume represents only IEX activity and is not total market volume."
         )
 
-    with st.expander("How to get and permanently add your Alpaca API keys"):
+    with st.expander("How to get and save your Alpaca API keys"):
         st.markdown(
             """
 1. Create or sign in to your Alpaca account.
 2. Open the Alpaca dashboard and generate an API key and secret.
-3. Paste them into the protected fields above to use them for this app session.
-4. For automatic loading on future launches, create `.streamlit/secrets.toml` inside the
-   Stock Scanner folder and add `ALPACA_API_KEY` and `ALPACA_API_SECRET` there.
+3. Paste them into the protected fields above.
+4. Choose **Save on this Mac** to remember them only in this browser, or leave them
+   unsaved to use them for the current session only.
+5. Choose **Forget** whenever you want to remove the saved copy from this browser.
 
 Never place the secret directly inside `app.py`, email it, or share it in a screenshot.
             """
@@ -3051,24 +3129,38 @@ with research_tab:
         )
     with research_credentials_column:
         with st.expander("SEC", expanded=False):
-            if cloud_deployment and configured_sec_contact_email:
-                sec_contact_email = configured_sec_contact_email
-                st.caption("SEC access is configured securely for this app.")
-            else:
-                sec_contact_email = st.text_input(
-                    "SEC contact email",
-                    placeholder="you@example.com",
-                    help=(
-                        "Used only for this browser session to identify requests to the SEC."
-                        if cloud_deployment
-                        else "Used only to identify this app's requests to the SEC."
-                    ),
-                    type="password",
-                    key="sec_contact_email",
-                ).strip()
+            sec_contact_email = st.text_input(
+                "SEC contact email",
+                placeholder="you@example.com",
+                help=(
+                    "Saved only in this browser when you choose Save on this Mac."
+                    if cloud_deployment
+                    else "Used only to identify this app's requests to the SEC."
+                ),
+                type="password",
+                key="sec_contact_email",
+            ).strip()
             if cloud_deployment:
-                if not configured_sec_contact_email:
-                    st.caption("This email is not saved and is private to your current session.")
+                save_sec_column, forget_sec_column = st.columns(2)
+                with save_sec_column:
+                    if st.button("Save on this Mac", key="save_browser_sec_email"):
+                        if not sec_contact_email or "@" not in sec_contact_email:
+                            st.error("Enter a valid email address before saving.")
+                        else:
+                            try:
+                                save_browser_credentials(sec_contact_email=sec_contact_email)
+                                st.success("Saved in this browser.")
+                            except OSError as exc:
+                                st.error(str(exc))
+                with forget_sec_column:
+                    st.button(
+                        "Forget",
+                        key="forget_browser_sec_email",
+                        on_click=forget_browser_credentials,
+                        kwargs={"include_alpaca": False},
+                    )
+                if st.session_state.pop("browser_sec_message", ""):
+                    st.success("Saved email removed.")
             elif st.button("Save email", key="save_sec_email_default"):
                 if not sec_contact_email or "@" not in sec_contact_email:
                     st.error("Enter a valid email address before saving.")
