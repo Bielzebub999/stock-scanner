@@ -2653,7 +2653,7 @@ with trends_tab:
                 paper_bgcolor="#ffffff",
                 plot_bgcolor="#ffffff",
                 title={
-                    "text": f"{pattern_symbol}: 1990–{current_year}",
+                    "text": f"{pattern_symbol}: {current_year - 15}–{current_year}",
                     "x": 0.5,
                 },
                 hovermode="x unified",
