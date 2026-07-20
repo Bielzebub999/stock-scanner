@@ -1475,13 +1475,13 @@ def render_live_combined_chart(
     </style>
     <div id="{control_id}" aria-label="Chart date range">
         <div class="date-labels">
-            <span>Start: <output id="{start_output_id}">{start_year}</output></span>
+            <span>Start: <output id="{start_output_id}">{end_year - 15}</output></span>
             <span>End: <output id="{end_output_id}">{end_year}</output></span>
         </div>
         <div class="date-track">
             <div id="{selected_track_id}"></div>
             <input id="{start_input_id}" type="range" min="{start_year}" max="{end_year}"
-                value="{start_year}" step="1" aria-label="Start year">
+                value="{end_year - 15}" step="1" aria-label="Start year">
             <input id="{end_input_id}" type="range" min="{start_year}" max="{end_year}"
                 value="{end_year}" step="1" aria-label="End year">
         </div>
