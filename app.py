@@ -2004,7 +2004,7 @@ div[data-testid="stVerticalBlock"] {
         font-weight: 600;
         font-size: 0.88rem;
         line-height: 1rem;
-        padding: 0.18rem 0.45rem;
+        padding: 0.4rem 0.45rem;
         margin: 0;
         border-radius: 5px;
         text-decoration: none !important;
@@ -2014,7 +2014,7 @@ div[data-testid="stVerticalBlock"] {
         padding: 0 !important;
     }
     .st-key-hamburger_menu_links div[data-testid="stVerticalBlock"] {
-        gap: 0.5rem !important;
+        gap: 0.12rem !important;
     }
     .st-key-hamburger_menu_links .scanner-menu-link:hover {
         color: #1d4ed8 !important;
