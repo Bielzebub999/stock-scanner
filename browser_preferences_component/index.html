@@ -1,0 +1,40 @@
+<script>
+(() => {
+  const STORAGE_KEY = "stock_scanner_watchlist_v1";
+  let lastRender = "";
+
+  const send = (type, extra = {}) => window.parent.postMessage({
+    isStreamlitMessage: true,
+    type,
+    ...extra
+  }, "*");
+
+  const returnValue = (value) => {
+    if (value) {
+      send("streamlit:setComponentValue", { value });
+    }
+    send("streamlit:setFrameHeight", { height: 0 });
+  };
+
+  window.addEventListener("message", event => {
+    if (event.data?.type !== "streamlit:render") return;
+    const action = event.data.args?.action || "read";
+    const symbols = String(event.data.args?.symbols || "").trim();
+    const signature = `${action}:${symbols}`;
+    if (signature === lastRender) return;
+    lastRender = signature;
+
+    try {
+      if (action === "write" && symbols) {
+        window.localStorage.setItem(STORAGE_KEY, symbols);
+      }
+      returnValue(window.localStorage.getItem(STORAGE_KEY) || symbols);
+    } catch (_) {
+      returnValue(symbols);
+    }
+  });
+
+  send("streamlit:componentReady", { apiVersion: 1 });
+  send("streamlit:setFrameHeight", { height: 0 });
+})();
+</script>
