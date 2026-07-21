@@ -25,7 +25,7 @@ except ImportError:
 
 DEFAULT_SYMBOLS = [
     "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
-    "TSLA", "PUNK", "BAYC", "BTC"
+    "TSLA", "BTC"
 ]
 LEGACY_PREFERENCES_FILE = Path(__file__).with_name("preferences.json")
 PREFERENCES_FILE = (
