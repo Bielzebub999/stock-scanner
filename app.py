@@ -45,6 +45,10 @@ live_stock_search_component = components.declare_component(
     "live_stock_search",
     path=str(Path(__file__).with_name("live_stock_search_component")),
 )
+browser_preferences_component = components.declare_component(
+    "browser_preferences",
+    path=str(Path(__file__).with_name("browser_preferences_component")),
+)
 
 SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
@@ -88,12 +92,15 @@ def is_streamlit_cloud() -> bool:
 def load_preferences() -> dict:
     if is_streamlit_cloud():
         browser_preferences = {}
+        local_watchlist = st.session_state.get("_browser_local_watchlist", "")
+        if local_watchlist:
+            browser_preferences["symbols"] = local_watchlist
         if browser_cookie_manager is not None:
             try:
                 saved_symbols = browser_cookie_manager.get(
                     cookie=BROWSER_WATCHLIST_COOKIE
                 )
-                if saved_symbols:
+                if saved_symbols and "symbols" not in browser_preferences:
                     st.session_state["_browser_watchlist_cookie"] = saved_symbols
                     browser_preferences["symbols"] = saved_symbols
                 saved_alpaca_key = browser_cookie_manager.get(
@@ -132,6 +139,9 @@ def load_preferences() -> dict:
 def write_preferences(preferences: dict) -> None:
     if is_streamlit_cloud():
         saved_symbols = str(preferences.get("symbols", "")).strip()
+        if saved_symbols:
+            st.session_state["_browser_local_watchlist"] = saved_symbols
+            st.session_state["_pending_browser_watchlist"] = saved_symbols
         if (
             browser_cookie_manager is not None
             and saved_symbols
@@ -1554,6 +1564,18 @@ if is_streamlit_cloud() and stx is not None:
     st.session_state["_browser_cookie_sync_passes"] = (
         st.session_state.get("_browser_cookie_sync_passes", 0) + 1
     )
+if is_streamlit_cloud():
+    pending_browser_watchlist = st.session_state.get("_pending_browser_watchlist", "")
+    stored_browser_watchlist = browser_preferences_component(
+        action="write" if pending_browser_watchlist else "read",
+        symbols=pending_browser_watchlist,
+        key="browser_watchlist_storage",
+        default="",
+    )
+    if stored_browser_watchlist:
+        st.session_state["_browser_local_watchlist"] = str(stored_browser_watchlist)
+        if pending_browser_watchlist == stored_browser_watchlist:
+            st.session_state.pop("_pending_browser_watchlist", None)
 main_pages = [
     "My Watchlist",
     "Alpaca Live Market Data",
@@ -2181,12 +2203,79 @@ div[data-testid="stVerticalBlock"] {
         box-shadow: 0 0 0 2px rgba(119, 124, 130, 0.28) !important;
     }
     @media (max-width: 640px) {
+        div[data-testid="stMainBlockContainer"] {
+            padding: 0.75rem 0.65rem 5.25rem !important;
+            max-width: 100% !important;
+        }
+        .scanner-main-title {
+            font-size: 2rem !important;
+            line-height: 1.12 !important;
+            padding: 0.15rem 3.1rem 0 !important;
+            overflow-wrap: anywhere;
+        }
+        .scanner-main-subtitle {
+            font-size: 0.78rem !important;
+            line-height: 1.2 !important;
+            margin: 0.35rem 0 0 !important;
+            padding: 0 0.35rem !important;
+        }
+        div[data-testid="stVerticalBlock"] {
+            gap: 0.75rem !important;
+        }
+        div[data-testid="stElementContainer"]:has(.st-key-native_hamburger_navigation),
+        div[data-testid="stElementContainer"]:has(.st-key-floating_stock_search) {
+            height: auto !important;
+            min-height: 2.5rem !important;
+            margin: 0 0 0.45rem !important;
+            overflow: visible !important;
+        }
+        .st-key-native_hamburger_navigation,
+        .st-key-floating_stock_search {
+            position: relative !important;
+            inset: auto !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            margin: 0 !important;
+            z-index: 20 !important;
+        }
+        .st-key-native_hamburger_navigation div[data-testid="stPopover"] button {
+            width: 3rem !important;
+            min-height: 2.35rem !important;
+        }
+        section[data-testid="stSidebar"] {
+            width: min(88vw, 20rem) !important;
+            min-width: min(88vw, 20rem) !important;
+        }
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"] {
+            display: flex !important;
+        }
+        section[data-testid="stSidebar"] [data-testid="stSidebarHeader"] {
+            display: flex !important;
+            height: auto !important;
+            min-height: 2.5rem !important;
+        }
+        div[data-testid="stDataFrame"] {
+            max-width: calc(100vw - 1.3rem) !important;
+            overflow-x: auto !important;
+        }
         .st-key-floating_scan_controls {
-            right: 0.75rem;
-            bottom: 0.75rem;
+            left: 0.65rem !important;
+            right: 0.65rem !important;
+            bottom: 0.65rem !important;
+            width: auto !important;
+        }
+        .st-key-floating_scan_controls button {
+            width: 100% !important;
         }
         div[data-testid="stStatusWidget"] {
-            width: 220px !important;
+            display: none !important;
+        }
+        div[data-testid="stHorizontalBlock"] {
+            gap: 0.65rem !important;
+        }
+        button, input, textarea, select {
+            font-size: 16px !important;
         }
     }
     </style>
@@ -3659,6 +3748,3 @@ with settings_tab:
                             st.success("Saved in this browser.")
                         except OSError as exc:
                             st.error(str(exc))
-if errors:
-    with st.expander("Symbols with warnings"):
-        st.write(errors)
