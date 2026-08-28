@@ -2182,6 +2182,7 @@ st.html(
     }
     .st-key-sidebar_watchlist_card textarea {
         background: #ffffff !important;
+        color: #172033 !important;
         border-color: #93c5fd !important;
         border-radius: 10px !important;
         font-size: 0.95rem !important;
@@ -2190,6 +2191,23 @@ st.html(
     .st-key-sidebar_watchlist_card textarea:focus {
         border-color: #2563eb !important;
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.13) !important;
+    }
+    .st-key-sidebar_watchlist_card textarea::placeholder {
+        color: #64748b !important;
+        opacity: 1 !important;
+    }
+    .st-key-sidebar_watchlist_card [data-testid="stWidgetLabel"] p,
+    .st-key-sidebar_momentum_card [data-testid="stWidgetLabel"] p,
+    .st-key-sidebar_oversold_card [data-testid="stWidgetLabel"] p,
+    .st-key-sidebar_oversold_card label p {
+        color: #334155 !important;
+        opacity: 1 !important;
+        font-weight: 600 !important;
+    }
+    .st-key-sidebar_momentum_card [data-testid="stSlider"] p,
+    .st-key-sidebar_oversold_card [data-testid="stSlider"] p {
+        color: #475569 !important;
+        opacity: 1 !important;
     }
     .st-key-sidebar_scan_action {
         margin: 0.25rem 0 1rem;
