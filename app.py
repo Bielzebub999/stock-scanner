@@ -695,7 +695,7 @@ def render_removable_stock_table(
 ):
     display = dataframe.reset_index(drop=True).copy()
     selection = st.dataframe(
-        display,
+        highlight_selected_table_rows(display, editor_key),
         row_height=40,
         hide_index=True,
         use_container_width=True,
@@ -735,7 +735,7 @@ def render_stock_selector_table(
     ]
     display = dataframe[selector_columns].reset_index(drop=True)
     selection = st.dataframe(
-        display,
+        highlight_selected_table_rows(display, selector_key),
         row_height=40,
         hide_index=True,
         use_container_width=True,
@@ -1143,6 +1143,30 @@ def dataframe_height(dataframe: pd.DataFrame, extra_rows: int = 0) -> int:
     """Fit the larger header, every data row, and the bottom scrollbar."""
     fitted_height = 40 * (len(dataframe) + 1 + extra_rows) + 24
     return min(fitted_height, 640)
+
+
+def highlight_selected_table_rows(dataframe: pd.DataFrame, table_key: str):
+    """Shade the complete selected row while retaining Streamlit interactions."""
+    table_state = st.session_state.get(table_key, {})
+    try:
+        selected_rows = list(table_state.selection.rows)
+    except (AttributeError, TypeError):
+        try:
+            selected_rows = list(table_state.get("selection", {}).get("rows", []))
+        except (AttributeError, TypeError):
+            selected_rows = []
+    if not selected_rows:
+        return dataframe
+    selected_row_numbers = set(selected_rows)
+    return dataframe.style.apply(
+        lambda row: [
+            "background-color: rgba(37, 99, 235, 0.22); font-weight: 600;"
+            if row.name in selected_row_numbers
+            else ""
+            for _ in row
+        ],
+        axis=1,
+    )
 
 
 def trend_label(score: int) -> str:
@@ -2921,7 +2945,7 @@ with all_tab:
     )
     trend_display = trend_display[trend_columns].reset_index(drop=True)
     trend_selection = st.dataframe(
-        trend_display,
+        highlight_selected_table_rows(trend_display, "trends_interactive_table"),
         row_height=40,
         hide_index=True,
         use_container_width=True,
@@ -3305,7 +3329,7 @@ with purchase_grade_tab:
             grade_summary["Grade"]
         )
         grade_selection = st.dataframe(
-            grade_summary,
+            highlight_selected_table_rows(grade_summary, "purchase_grade_table"),
             row_height=40,
             hide_index=True,
             use_container_width=True,
@@ -3492,7 +3516,10 @@ with top_graded_tab:
                         .fillna(display_qualifying_grades["Grade"])
                     )
                     broad_selection = st.dataframe(
-                        display_qualifying_grades[top_grade_columns],
+                        highlight_selected_table_rows(
+                            display_qualifying_grades[top_grade_columns],
+                            "all_stocks_grade_table",
+                        ),
                         row_height=40,
                         hide_index=True,
                         use_container_width=True,
@@ -3687,7 +3714,9 @@ with autopilot_tab:
                 st.info("No matching congressional disclosures are available right now.")
             else:
                 congress_selection = st.dataframe(
-                    congress_trades,
+                    highlight_selected_table_rows(
+                        congress_trades, "autopilot_congress_table"
+                    ),
                     row_height=40,
                     hide_index=True,
                     use_container_width=True,
