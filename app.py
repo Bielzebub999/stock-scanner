@@ -26,6 +26,9 @@ except ImportError:
 
 DEFAULT_SYMBOLS = []
 LEGACY_PREFERENCES_FILE = Path(__file__).with_name("preferences.json")
+OLD_MAC_PREFERENCES_FILE = (
+    Path.home() / "Library" / "Application Support" / "Stock Scanner" / "preferences.json"
+)
 PREFERENCES_FILE = (
     Path.home()
     / "Library"
@@ -83,10 +86,10 @@ TRACKED_13F_MANAGERS = {
 
 @st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
 def load_tsp_history() -> tuple[pd.DataFrame, str]:
-    """Load public daily TSP share prices, preferring the official TSP file."""
+    """Load public daily TSP share prices with an automatic backup source."""
     sources = (
+        (TSP_HISTORY_FALLBACK_URL, "TSP Folio historical feed"),
         (TSP_HISTORY_URL, "Thrift Savings Plan"),
-        (TSP_HISTORY_FALLBACK_URL, "TSP Folio backup"),
     )
     last_error = None
     for url, source_name in sources:
@@ -169,6 +172,7 @@ def load_preferences() -> dict:
         return browser_preferences
     for preferences_path in (
         PREFERENCES_FILE,
+        OLD_MAC_PREFERENCES_FILE,
         FALLBACK_PREFERENCES_FILE,
         LEGACY_PREFERENCES_FILE,
     ):
