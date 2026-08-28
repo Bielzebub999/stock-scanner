@@ -6,6 +6,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 import yfinance as yf
 import datetime
+import io
 import json
 import os
 import re
@@ -51,6 +52,10 @@ SEC_TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 SEC_SUBMISSIONS_URL = "https://data.sec.gov/submissions/CIK{cik}.json"
 SEC_ARCHIVES_URL = "https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{document}"
 OPENFDA_DRUGS_URL = "https://api.fda.gov/drug/drugsfda.json"
+TSP_HISTORY_URL = "https://www.tsp.gov/data/fund-price-history.csv"
+TSP_HISTORY_FALLBACK_URL = (
+    "https://www.tspfolio.com/media/md/prices/tsp-share-prices.csv"
+)
 SEC_RISK_ITEMS = {
     "1.03": "Bankruptcy or receivership",
     "2.04": "Triggering events that accelerate an obligation",
@@ -74,6 +79,50 @@ TRACKED_13F_MANAGERS = {
     "Renaissance Technologies": "0001037389",
     "Soros Fund Management": "0001029160",
 }
+
+
+@st.cache_data(ttl=6 * 60 * 60, show_spinner=False)
+def load_tsp_history() -> tuple[pd.DataFrame, str]:
+    """Load public daily TSP share prices, preferring the official TSP file."""
+    sources = (
+        (TSP_HISTORY_URL, "Thrift Savings Plan"),
+        (TSP_HISTORY_FALLBACK_URL, "TSP Folio backup"),
+    )
+    last_error = None
+    for url, source_name in sources:
+        try:
+            request = Request(
+                url,
+                headers={
+                    "User-Agent": "Mozilla/5.0 StockScanner/1.0",
+                    "Accept": "text/csv,*/*",
+                },
+            )
+            with urlopen(request, timeout=25) as response:
+                raw_data = response.read()
+            history = pd.read_csv(io.BytesIO(raw_data))
+            history.columns = [str(column).strip() for column in history.columns]
+            date_column = next(
+                (column for column in history.columns if "date" in column.lower()),
+                history.columns[0],
+            )
+            history = history.rename(columns={date_column: "Date"})
+            history["Date"] = pd.to_datetime(history["Date"], errors="coerce")
+            history = history.dropna(subset=["Date"]).sort_values("Date")
+            for column in history.columns:
+                if column != "Date":
+                    history[column] = pd.to_numeric(history[column], errors="coerce")
+            fund_columns = [
+                column
+                for column in history.columns
+                if column != "Date" and history[column].notna().any()
+            ]
+            if history.empty or not fund_columns:
+                raise ValueError("The downloaded file did not contain fund prices.")
+            return history[["Date", *fund_columns]], source_name
+        except Exception as exc:
+            last_error = exc
+    raise RuntimeError(f"TSP history is temporarily unavailable: {last_error}")
 
 
 def is_streamlit_cloud() -> bool:
@@ -1598,6 +1647,7 @@ main_pages = [
     "Purchase Grade",
     "Autopilot Research",
     "Company Research",
+    "TSP Historical Trends",
     "Top 20",
     "Settings",
 ]
@@ -2483,6 +2533,7 @@ oversold_tab = page_tabs["Oversold Reversals"]
 purchase_grade_tab = page_tabs["Purchase Grade"]
 autopilot_tab = page_tabs["Autopilot Research"]
 research_tab = page_tabs["Company Research"]
+tsp_tab = page_tabs["TSP Historical Trends"]
 top_graded_tab = page_tabs["Top 20"]
 settings_tab = page_tabs["Settings"]
 
@@ -3632,6 +3683,160 @@ with research_tab:
             "auditor changes (4.01), and financial statements that should no longer be "
             "relied upon (4.02). Always open and read the filing because context matters."
         )
+
+with tsp_tab:
+    st.write(
+        "Explore public Thrift Savings Plan fund share-price history. This page "
+        "does not connect to or display your personal TSP account."
+    )
+    try:
+        with st.spinner("Loading TSP fund history…"):
+            tsp_history, tsp_source = load_tsp_history()
+
+        tsp_funds = [column for column in tsp_history.columns if column != "Date"]
+        tsp_fund, tsp_start = st.columns([1, 1.25])
+        with tsp_fund:
+            selected_tsp_fund = st.selectbox(
+                "TSP fund",
+                tsp_funds,
+                key="selected_tsp_fund",
+            )
+
+        today = datetime.date.today()
+        first_tsp_date = tsp_history["Date"].min().date()
+        default_tsp_start = max(
+            first_tsp_date,
+            today.replace(year=max(first_tsp_date.year, today.year - 5)),
+        )
+        with tsp_start:
+            selected_tsp_start = st.date_input(
+                "Start date",
+                value=default_tsp_start,
+                min_value=first_tsp_date,
+                max_value=today,
+                key="tsp_start_date",
+            )
+        st.caption(
+            f"End date: {today.strftime('%d %b %Y')} · Automatically updates each day · "
+            f"Data source: {tsp_source}"
+        )
+
+        tsp_filtered = tsp_history.loc[
+            (tsp_history["Date"].dt.date >= selected_tsp_start)
+            & (tsp_history["Date"].dt.date <= today),
+            ["Date", selected_tsp_fund],
+        ].dropna()
+        if tsp_filtered.empty:
+            st.info("No published prices are available in that date range.")
+        else:
+            first_price = float(tsp_filtered[selected_tsp_fund].iloc[0])
+            latest_price = float(tsp_filtered[selected_tsp_fund].iloc[-1])
+            total_change = (
+                ((latest_price / first_price) - 1) * 100 if first_price else 0.0
+            )
+            latest_data_date = tsp_filtered["Date"].iloc[-1].date()
+            price_column, change_column, date_column = st.columns(3)
+            price_column.metric("Latest share price", f"${latest_price:,.4f}")
+            change_column.metric("Change in selected range", f"{total_change:+.2f}%")
+            date_column.metric("Latest published date", latest_data_date.strftime("%d %b %Y"))
+
+            tsp_chart = go.Figure()
+            tsp_chart.add_trace(
+                go.Scatter(
+                    x=tsp_filtered["Date"],
+                    y=tsp_filtered[selected_tsp_fund],
+                    mode="lines",
+                    name=selected_tsp_fund,
+                    line={"color": "#2563eb", "width": 2.5},
+                    hovertemplate="%{x|%d %b %Y}<br>$%{y:.4f}<extra></extra>",
+                )
+            )
+            tsp_chart.update_layout(
+                title=(
+                    f"{selected_tsp_fund}: {selected_tsp_start.strftime('%d %b %Y')}–"
+                    f"{today.strftime('%d %b %Y')}"
+                ),
+                template="plotly_white",
+                height=430,
+                margin={"l": 25, "r": 20, "t": 60, "b": 25},
+                xaxis_title="Date",
+                yaxis_title="Share price ($)",
+                hovermode="x unified",
+            )
+            tsp_chart.update_xaxes(rangeslider_visible=False)
+
+            fund_price_rows = []
+            for fund_name in tsp_funds:
+                fund_prices = tsp_history[["Date", fund_name]].dropna().sort_values("Date")
+                if fund_prices.empty:
+                    continue
+                current_fund_price = float(fund_prices[fund_name].iloc[-1])
+                previous_fund_price = (
+                    float(fund_prices[fund_name].iloc[-2])
+                    if len(fund_prices) > 1
+                    else current_fund_price
+                )
+                fund_difference = current_fund_price - previous_fund_price
+                if fund_difference > 0:
+                    difference_display = f"🟢 ▲ ${abs(fund_difference):.4f}"
+                elif fund_difference < 0:
+                    difference_display = f"🔴 ▼ ${abs(fund_difference):.4f}"
+                else:
+                    difference_display = "⚪ — $0.0000"
+                fund_price_rows.append(
+                    {
+                        "Fund": fund_name,
+                        "Current": current_fund_price,
+                        "Previous": previous_fund_price,
+                        "Change": difference_display,
+                    }
+                )
+            fund_price_table = pd.DataFrame(fund_price_rows)
+
+            tsp_chart_column, tsp_prices_column = st.columns([3.25, 1], gap="medium")
+            with tsp_chart_column:
+                st.plotly_chart(tsp_chart, use_container_width=True)
+            with tsp_prices_column:
+                st.markdown("#### Fund prices")
+                if len(tsp_history) > 1:
+                    latest_close = tsp_history["Date"].iloc[-1].strftime("%d %b %Y")
+                    previous_close = tsp_history["Date"].iloc[-2].strftime("%d %b %Y")
+                    st.caption(f"{latest_close} compared with {previous_close}")
+                st.dataframe(
+                    fund_price_table,
+                    hide_index=True,
+                    use_container_width=True,
+                    height=300,
+                    column_config={
+                        "Fund": st.column_config.TextColumn("Fund", width="small"),
+                        "Current": st.column_config.NumberColumn(
+                            "Current", format="$%.4f", width="small"
+                        ),
+                        "Previous": st.column_config.NumberColumn(
+                            "Previous", format="$%.4f", width="small"
+                        ),
+                        "Change": st.column_config.TextColumn("Change", width="medium"),
+                    },
+                )
+
+            with st.expander("View historical prices"):
+                tsp_table = tsp_filtered.sort_values("Date", ascending=False).copy()
+                tsp_table["Date"] = tsp_table["Date"].dt.strftime("%d %b %Y")
+                st.dataframe(
+                    tsp_table,
+                    hide_index=True,
+                    use_container_width=True,
+                    column_config={
+                        selected_tsp_fund: st.column_config.NumberColumn(
+                            "Share price", format="$%.4f"
+                        )
+                    },
+                )
+    except Exception as exc:
+        st.warning(str(exc))
+        if st.button("Try loading TSP data again", key="retry_tsp_history"):
+            load_tsp_history.clear()
+            st.rerun()
 
 with settings_tab:
     if st.query_params.get("focus") == "alpaca":
