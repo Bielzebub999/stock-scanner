@@ -3,6 +3,16 @@
   const STORAGE_KEY = "stock_scanner_watchlist_v1";
   let lastRender = "";
 
+  const storage = (() => {
+    try {
+      const parentStorage = window.parent.localStorage;
+      parentStorage.getItem(STORAGE_KEY);
+      return parentStorage;
+    } catch (_) {
+      return window.localStorage;
+    }
+  })();
+
   const send = (type, extra = {}) => window.parent.postMessage({
     isStreamlitMessage: true,
     type,
@@ -26,9 +36,9 @@
 
     try {
       if (action === "write" && symbols) {
-        window.localStorage.setItem(STORAGE_KEY, symbols);
+        storage.setItem(STORAGE_KEY, symbols);
       }
-      returnValue(window.localStorage.getItem(STORAGE_KEY) || symbols);
+      returnValue(storage.getItem(STORAGE_KEY) || symbols);
     } catch (_) {
       returnValue(symbols);
     }
