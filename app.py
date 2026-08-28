@@ -686,6 +686,7 @@ def render_removable_stock_table(
     display = dataframe.reset_index(drop=True).copy()
     selection = st.dataframe(
         display,
+        row_height=40,
         hide_index=True,
         use_container_width=True,
         height=dataframe_height(display),
@@ -725,6 +726,7 @@ def render_stock_selector_table(
     display = dataframe[selector_columns].reset_index(drop=True)
     selection = st.dataframe(
         display,
+        row_height=40,
         hide_index=True,
         use_container_width=True,
         height=dataframe_height(display),
@@ -1128,8 +1130,8 @@ def format_research_value(value, kind: str = "number") -> str:
 
 
 def dataframe_height(dataframe: pd.DataFrame, extra_rows: int = 0) -> int:
-    """Fit the header, every data row, and the bottom scrollbar."""
-    return 36 * (len(dataframe) + 1 + extra_rows) + 27
+    """Fit the larger header, every data row, and the bottom scrollbar."""
+    return 40 * (len(dataframe) + 1 + extra_rows) + 24
 
 
 def trend_label(score: int) -> str:
@@ -1923,29 +1925,31 @@ if "alpaca_api_secret" not in st.session_state or load_browser_credentials:
 if load_browser_credentials:
     st.session_state["_browser_credentials_loaded"] = True
 
-symbols_text = st.sidebar.text_area(
-    "Symbols (separated by commas)",
-    height=130,
-    key="symbols_text",
-    on_change=normalize_symbols_text,
-)
-if st.sidebar.button(
-    "Save symbols",
-    icon=":material/save:",
-    key="save_watchlist_symbols",
-    use_container_width=True,
-    on_click=normalize_symbols_text,
-):
-    symbols_to_save = st.session_state.get("symbols_text", "").strip()
-    if symbols_to_save:
-        try:
-            save_symbol_preferences(symbols_to_save)
-            st.session_state["watchlist_message"] = "Ticker symbols saved."
-            if is_streamlit_cloud():
-                st.rerun()
-            st.sidebar.success("Ticker symbols saved.")
-        except OSError as exc:
-            st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
+with st.sidebar.container(key="sidebar_watchlist_card"):
+    st.markdown("### My symbols")
+    symbols_text = st.text_area(
+        "Symbols (separated by commas)",
+        height=130,
+        key="symbols_text",
+        on_change=normalize_symbols_text,
+    )
+    if st.button(
+        "Save symbols",
+        icon=":material/save:",
+        key="save_watchlist_symbols",
+        use_container_width=True,
+        on_click=normalize_symbols_text,
+    ):
+        symbols_to_save = st.session_state.get("symbols_text", "").strip()
+        if symbols_to_save:
+            try:
+                save_symbol_preferences(symbols_to_save)
+                st.session_state["watchlist_message"] = "Ticker symbols saved."
+                if is_streamlit_cloud():
+                    st.rerun()
+                st.success("Ticker symbols saved.")
+            except OSError as exc:
+                st.error(f"Ticker symbols could not be saved: {exc}")
 symbols = list(dict.fromkeys(
     symbol.strip().upper()
     for symbol in symbols_text.replace("\n", ",").split(",")
@@ -2029,50 +2033,54 @@ with st.container(key="floating_stock_search"):
                 st.session_state["stock_lookup_warning_shown"] = True
                 show_stock_lookup_unavailable_dialog()
 
-st.sidebar.subheader("Momentum settings")
-minimum_volume_spike_percent = st.sidebar.slider(
-    "Minimum volume spike",
-    min_value=0,
-    max_value=300,
-    value=50,
-    step=10,
-    format="%d%%",
-    help="50% means today's volume must be at least 1.5 times its 20-day average.",
-)
-high_distance_percent = st.sidebar.slider(
-    "Distance from 20-day high",
-    min_value=1,
-    max_value=15,
-    value=5,
-    step=1,
-    format="%d%%",
-)
-st.sidebar.subheader("Oversold settings")
-maximum_rsi = st.sidebar.slider(
-    "Maximum RSI",
-    min_value=20,
-    max_value=50,
-    value=40,
-    step=1,
-    help="Lower values identify more deeply oversold stocks.",
-)
-require_up_day = st.sidebar.checkbox(
-    "Require price to turn up",
-    value=True,
-    help="When enabled, the latest close must be higher than the prior close.",
-)
+with st.sidebar.container(key="sidebar_momentum_card"):
+    st.subheader("Momentum settings")
+    minimum_volume_spike_percent = st.slider(
+        "Minimum volume spike",
+        min_value=0,
+        max_value=300,
+        value=50,
+        step=10,
+        format="%d%%",
+        help="50% means today's volume must be at least 1.5 times its 20-day average.",
+    )
+    high_distance_percent = st.slider(
+        "Distance from 20-day high",
+        min_value=1,
+        max_value=15,
+        value=5,
+        step=1,
+        format="%d%%",
+    )
 
-if st.sidebar.button("Run scan again", type="primary", use_container_width=True):
-    st.session_state["run_scan"] = True
-    try:
-        save_symbol_preferences(symbols_text)
-        st.sidebar.success(
-            "Ticker symbols updated for this session."
-            if cloud_deployment
-            else "Ticker symbols saved."
-        )
-    except OSError as exc:
-        st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
+with st.sidebar.container(key="sidebar_oversold_card"):
+    st.subheader("Oversold settings")
+    maximum_rsi = st.slider(
+        "Maximum RSI",
+        min_value=20,
+        max_value=50,
+        value=40,
+        step=1,
+        help="Lower values identify more deeply oversold stocks.",
+    )
+    require_up_day = st.checkbox(
+        "Require price to turn up",
+        value=True,
+        help="When enabled, the latest close must be higher than the prior close.",
+    )
+
+with st.sidebar.container(key="sidebar_scan_action"):
+    if st.button("Run scan again", type="primary", use_container_width=True):
+        st.session_state["run_scan"] = True
+        try:
+            save_symbol_preferences(symbols_text)
+            st.success(
+                "Ticker symbols updated for this session."
+                if cloud_deployment
+                else "Ticker symbols saved."
+            )
+        except OSError as exc:
+            st.error(f"Ticker symbols could not be saved: {exc}")
 
 st.html(
     """
@@ -2151,7 +2159,46 @@ st.html(
         padding-top: 0 !important;
     }
     section[data-testid="stSidebar"] [data-testid="stSidebarUserContent"] {
-        padding-top: 0.35rem !important;
+        padding: 0.55rem 0.65rem 1rem !important;
+    }
+    .st-key-sidebar_watchlist_card,
+    .st-key-sidebar_momentum_card,
+    .st-key-sidebar_oversold_card {
+        background: rgba(255, 255, 255, 0.82);
+        border: 1px solid rgba(147, 197, 253, 0.72);
+        border-radius: 14px;
+        padding: 0.75rem 0.8rem 0.85rem;
+        margin: 0.55rem 0 0.7rem;
+        box-shadow: 0 5px 16px rgba(30, 64, 175, 0.08);
+    }
+    .st-key-sidebar_watchlist_card h3,
+    .st-key-sidebar_momentum_card h3,
+    .st-key-sidebar_oversold_card h3 {
+        margin: 0 0 0.55rem !important;
+        padding: 0 0 0.35rem !important;
+        color: #164e63 !important;
+        font-size: 1.05rem !important;
+        border-bottom: 1px solid rgba(14, 165, 233, 0.24) !important;
+    }
+    .st-key-sidebar_watchlist_card textarea {
+        background: #ffffff !important;
+        border-color: #93c5fd !important;
+        border-radius: 10px !important;
+        font-size: 0.95rem !important;
+        line-height: 1.45 !important;
+    }
+    .st-key-sidebar_watchlist_card textarea:focus {
+        border-color: #2563eb !important;
+        box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.13) !important;
+    }
+    .st-key-sidebar_scan_action {
+        margin: 0.25rem 0 1rem;
+        padding: 0.15rem 0.1rem;
+    }
+    .st-key-sidebar_scan_action button {
+        min-height: 2.7rem !important;
+        font-weight: 700 !important;
+        border-radius: 11px !important;
     }
     [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapsedControl"] {
@@ -2342,6 +2389,8 @@ div[data-testid="stVerticalBlock"] {
         border-radius: 12px;
         overflow: hidden;
         box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
+        font-size: 1rem;
+        background: #ffffff;
     }
     .st-key-floating_scan_controls {
         position: fixed;
@@ -2806,6 +2855,7 @@ with trends_tab:
     trend_display = trend_display[trend_columns].reset_index(drop=True)
     trend_selection = st.dataframe(
         trend_display,
+        row_height=40,
         hide_index=True,
         use_container_width=True,
         height=dataframe_height(trend_display),
@@ -3109,6 +3159,7 @@ with catalyst_tab:
             else:
                 st.dataframe(
                     future_filings,
+                    row_height=40,
                     hide_index=True,
                     use_container_width=True,
                     height=dataframe_height(future_filings),
@@ -3149,6 +3200,7 @@ with catalyst_tab:
                 else:
                     st.dataframe(
                         recent_8k,
+                        row_height=40,
                         hide_index=True,
                         use_container_width=True,
                         height=dataframe_height(recent_8k),
@@ -3187,6 +3239,7 @@ with purchase_grade_tab:
         )
         grade_selection = st.dataframe(
             grade_summary,
+            row_height=40,
             hide_index=True,
             use_container_width=True,
             height=dataframe_height(grade_summary),
@@ -3261,6 +3314,7 @@ with purchase_grade_tab:
 
                 st.dataframe(
                     grade_details,
+                    row_height=40,
                     hide_index=True,
                     use_container_width=True,
                     height=dataframe_height(grade_details),
@@ -3372,6 +3426,7 @@ with top_graded_tab:
                     )
                     broad_selection = st.dataframe(
                         display_qualifying_grades[top_grade_columns],
+                        row_height=40,
                         hide_index=True,
                         use_container_width=True,
                         height=dataframe_height(qualifying_grades),
@@ -3489,6 +3544,7 @@ with alpaca_tab:
         st.markdown(f"### 🟢 LIVE — {live_feed}")
         st.dataframe(
             alpaca_quotes,
+            row_height=40,
             hide_index=True,
             use_container_width=True,
             height=dataframe_height(alpaca_quotes),
@@ -3572,6 +3628,7 @@ with autopilot_tab:
             else:
                 congress_selection = st.dataframe(
                     congress_trades,
+                    row_height=40,
                     hide_index=True,
                     use_container_width=True,
                     height=min(dataframe_height(congress_trades), 650),
@@ -3642,6 +3699,7 @@ with autopilot_tab:
                     filing_col2.metric("Filed", filing_metadata.get("Filed", ""))
                     st.dataframe(
                         holdings.head(100),
+                        row_height=40,
                         hide_index=True,
                         use_container_width=True,
                         height=min(dataframe_height(holdings.head(100)), 650),
@@ -3783,6 +3841,7 @@ with research_tab:
         ]
         st.dataframe(
             pd.DataFrame(financial_rows),
+            row_height=40,
             hide_index=True,
             use_container_width=True,
             height=dataframe_height(pd.DataFrame(financial_rows)),
@@ -3805,6 +3864,7 @@ with research_tab:
         else:
             st.dataframe(
                 fda_approvals,
+                row_height=40,
                 hide_index=True,
                 use_container_width=True,
                 height=dataframe_height(fda_approvals),
@@ -3835,6 +3895,7 @@ with research_tab:
             else:
                 st.dataframe(
                     filings_df,
+                    row_height=40,
                     hide_index=True,
                     use_container_width=True,
                     height=dataframe_height(filings_df),
