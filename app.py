@@ -294,7 +294,9 @@ def is_streamlit_cloud() -> bool:
 
 def load_preferences() -> dict:
     if is_streamlit_cloud():
-        browser_preferences = {}
+        browser_preferences = dict(
+            st.session_state.get("_browser_preferences", {})
+        )
         local_watchlist = st.session_state.get("_browser_local_watchlist", "")
         if local_watchlist:
             browser_preferences["symbols"] = local_watchlist
@@ -343,9 +345,16 @@ def load_preferences() -> dict:
 def write_preferences(preferences: dict) -> None:
     if is_streamlit_cloud():
         saved_symbols = str(preferences.get("symbols", "")).strip()
+        browser_preferences = {
+            "symbols": saved_symbols,
+            "alpaca_api_key": str(preferences.get("alpaca_api_key", "")).strip(),
+            "alpaca_api_secret": str(preferences.get("alpaca_api_secret", "")).strip(),
+            "sec_contact_email": str(preferences.get("sec_contact_email", "")).strip(),
+        }
+        st.session_state["_browser_preferences"] = browser_preferences
+        st.session_state["_pending_browser_preferences"] = browser_preferences
         if saved_symbols:
             st.session_state["_browser_local_watchlist"] = saved_symbols
-            st.session_state["_pending_browser_watchlist"] = saved_symbols
         if (
             browser_cookie_manager is not None
             and saved_symbols
@@ -404,24 +413,14 @@ def save_browser_credentials(
     alpaca_api_secret: str = "",
     sec_contact_email: str = "",
 ) -> None:
-    if browser_cookie_manager is None:
-        raise OSError("Browser storage is unavailable.")
-    expiration = datetime.datetime.now() + datetime.timedelta(days=365)
-    values = {
-        BROWSER_ALPACA_KEY_COOKIE: alpaca_api_key,
-        BROWSER_ALPACA_SECRET_COOKIE: alpaca_api_secret,
-        BROWSER_SEC_EMAIL_COOKIE: sec_contact_email,
-    }
-    for cookie_name, cookie_value in values.items():
-        if cookie_value:
-            browser_cookie_manager.set(
-                cookie_name,
-                cookie_value,
-                key=f"save_{cookie_name}",
-                expires_at=expiration,
-                secure=True,
-                same_site="strict",
-            )
+    preferences = load_preferences()
+    if alpaca_api_key:
+        preferences["alpaca_api_key"] = alpaca_api_key
+    if alpaca_api_secret:
+        preferences["alpaca_api_secret"] = alpaca_api_secret
+    if sec_contact_email:
+        preferences["sec_contact_email"] = sec_contact_email
+    write_preferences(preferences)
 
 
 def forget_browser_credentials(include_alpaca: bool = True, include_sec: bool = True) -> None:
@@ -1939,7 +1938,9 @@ with st.sidebar.container(key="sidebar_watchlist_card"):
         height=130,
         key="symbols_text",
         on_change=normalize_symbols_text,
+        label_visibility="collapsed",
     )
+    st.caption("Symbols (separated by commas)")
     if st.button(
         "Save symbols",
         icon=":material/save:",
@@ -2876,14 +2877,9 @@ with oversold_tab:
 
 with all_tab:
     st.markdown("### My Watchlist Results")
-    render_removable_stock_table(
-        results_df,
-        "all_results_remove_table",
-        column_config,
-    )
-    st.markdown("### Trends and Charts")
     st.write(
-        "Select any cell to open the combined price, trend, MACD, volume, and RVOL view."
+        "Select any cell in the table to open that stock's combined price, trend, "
+        "MACD, volume, and RVOL chart below."
     )
     premarket_volume_by_symbol = (
         premarket_df.set_index("Symbol")["Premarket volume"].to_dict()
@@ -2891,8 +2887,9 @@ with all_tab:
         else {}
     )
     trend_columns = [
-        "Symbol", "Trend score", "Trend", "Price", "RVOL",
-        "Premarket volume", "SMA20", "SMA50", "SMA200", "MACD", "MACD signal",
+        "Symbol", "Price", "Daily %", "RSI", "RVOL", "Volume spike %",
+        "Trend score", "Trend", "Momentum score", "Premarket volume",
+        "SMA20", "SMA50", "SMA200", "MACD", "MACD signal",
         "20-day resistance", "Breaking resistance", "Above SMA20", "Bullish trend",
         "Above SMA200", "MACD bullish",
     ]
