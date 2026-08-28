@@ -128,6 +128,112 @@ def load_tsp_history() -> tuple[pd.DataFrame, str]:
     raise RuntimeError(f"TSP history is temporarily unavailable: {last_error}")
 
 
+def render_tsp_without_watchlist() -> None:
+    """Render TSP research even when the stock watchlist is empty."""
+    st.write(
+        "Explore public Thrift Savings Plan fund share-price history. This page "
+        "does not connect to or display your personal TSP account."
+    )
+    try:
+        with st.spinner("Loading TSP fund history…"):
+            history, source_name = load_tsp_history()
+        funds = [column for column in history.columns if column != "Date"]
+        fund_column, start_column = st.columns([1, 1.25])
+        with fund_column:
+            selected_funds = st.multiselect(
+                "TSP funds",
+                funds,
+                default=[funds[0]],
+                key="empty_tsp_funds",
+                help="Check one or more funds to compare them on the chart.",
+            )
+        today = datetime.date.today()
+        first_date = history["Date"].min().date()
+        default_start = max(
+            first_date,
+            today.replace(year=max(first_date.year, today.year - 5)),
+        )
+        with start_column:
+            start_date = st.date_input(
+                "Start date",
+                value=default_start,
+                min_value=first_date,
+                max_value=today,
+                key="empty_tsp_start",
+            )
+        st.caption(
+            f"End date: {today.strftime('%d %b %Y')} · Automatically updates each day · "
+            f"Data source: {source_name}"
+        )
+        if not selected_funds:
+            st.info("Check at least one TSP fund to display its trend.")
+            return
+        filtered = history.loc[
+            (history["Date"].dt.date >= start_date)
+            & (history["Date"].dt.date <= today),
+            ["Date", *selected_funds],
+        ].dropna(subset=selected_funds, how="all")
+        if filtered.empty:
+            st.info("No published prices are available in that date range.")
+            return
+        figure = go.Figure()
+        for fund_name in selected_funds:
+            figure.add_trace(
+                go.Scatter(
+                    x=filtered["Date"],
+                    y=filtered[fund_name],
+                    mode="lines",
+                    name=fund_name,
+                    line={"width": 2.5},
+                    hovertemplate=(
+                        f"{fund_name}<br>%{{x|%d %b %Y}}<br>$%{{y:.4f}}<extra></extra>"
+                    ),
+                )
+            )
+        figure.update_layout(
+            title=(
+                f"{', '.join(selected_funds)}: {start_date.strftime('%d %b %Y')}–"
+                f"{today.strftime('%d %b %Y')}"
+            ),
+            template="plotly_white",
+            height=430,
+            margin={"l": 25, "r": 20, "t": 60, "b": 25},
+            xaxis_title="Date",
+            yaxis_title="Share price ($)",
+            hovermode="x unified",
+        )
+        price_rows = []
+        for fund_name in funds:
+            prices = history[["Date", fund_name]].dropna().sort_values("Date")
+            if prices.empty:
+                continue
+            latest = float(prices[fund_name].iloc[-1])
+            prior = float(prices[fund_name].iloc[-2]) if len(prices) > 1 else latest
+            move = latest - prior
+            arrow = "🟢 ▲" if move > 0 else "🔴 ▼" if move < 0 else "⚪ —"
+            price_rows.append(
+                {"Fund": fund_name, "Latest": latest, "Prior": prior,
+                 "Move": f"{arrow} ${abs(move):.4f}"}
+            )
+        chart_column, prices_column = st.columns([2.15, 1.25], gap="medium")
+        with chart_column:
+            st.plotly_chart(figure, use_container_width=True)
+        with prices_column:
+            st.markdown("#### Fund prices")
+            st.dataframe(
+                pd.DataFrame(price_rows),
+                hide_index=True,
+                use_container_width=True,
+                height=300,
+                column_config={
+                    "Latest": st.column_config.NumberColumn(format="$%.4f"),
+                    "Prior": st.column_config.NumberColumn(format="$%.4f"),
+                },
+            )
+    except Exception as exc:
+        st.warning(str(exc))
+
+
 def is_streamlit_cloud() -> bool:
     try:
         host = str(st.context.headers.get("Host", "")).lower().split(":", 1)[0]
@@ -1635,6 +1741,7 @@ if is_streamlit_cloud():
             not pending_browser_watchlist
             and stored_browser_watchlist
             and stored_browser_watchlist != previous_local_watchlist
+            and not st.session_state.get("symbols_text", "").strip()
         ):
             st.session_state["symbols_text"] = stored_browser_watchlist
             st.session_state["_browser_watchlist_loaded"] = True
@@ -1659,6 +1766,20 @@ if "selected_main_page" not in st.session_state:
     st.session_state["selected_main_page"] = main_pages[0]
 if st.session_state["selected_main_page"] not in main_pages:
     st.session_state["selected_main_page"] = main_pages[0]
+
+
+def navigate_to_main_page(page_name: str) -> None:
+    """Change pages without starting a new browser session."""
+    current_symbols = st.session_state.get("symbols_text", "").strip()
+    if current_symbols:
+        try:
+            save_symbol_preferences(current_symbols)
+        except OSError:
+            pass
+    st.session_state["selected_main_page"] = page_name
+    st.query_params["page"] = page_name
+
+
 requested_main_page = st.query_params.get("page")
 if requested_main_page in main_pages:
     st.session_state["selected_main_page"] = requested_main_page
@@ -1671,10 +1792,12 @@ if (
 st.session_state["_previous_main_page"] = st.session_state["selected_main_page"]
 
 with st.sidebar.container(key="native_watchlist_navigation"):
-    st.markdown(
-        '<a class="scanner-home-button" target="_self" '
-        'href="?page=My%20Watchlist">⌂ My Watchlist</a>',
-        unsafe_allow_html=True,
+    st.button(
+        "⌂ My Watchlist",
+        key="watchlist_home_button",
+        use_container_width=True,
+        on_click=navigate_to_main_page,
+        args=("My Watchlist",),
     )
 
 with st.container(key="native_hamburger_navigation"):
@@ -1686,10 +1809,12 @@ with st.container(key="native_hamburger_navigation"):
                     if page_name == st.session_state["selected_main_page"]
                     else page_name
                 )
-                st.markdown(
-                    f'<a class="scanner-menu-link" target="_self" '
-                    f'href="?page={quote(page_name)}">{link_label}</a>',
-                    unsafe_allow_html=True,
+                st.button(
+                    link_label,
+                    key=f"menu_page_{page_name}",
+                    use_container_width=True,
+                    on_click=navigate_to_main_page,
+                    args=(page_name,),
                 )
 
 st.markdown(
@@ -1770,7 +1895,16 @@ if st.sidebar.button(
     use_container_width=True,
     on_click=normalize_symbols_text,
 ):
-    pass
+    symbols_to_save = st.session_state.get("symbols_text", "").strip()
+    if symbols_to_save:
+        try:
+            save_symbol_preferences(symbols_to_save)
+            st.session_state["watchlist_message"] = "Ticker symbols saved."
+            if is_streamlit_cloud():
+                st.rerun()
+            st.sidebar.success("Ticker symbols saved.")
+        except OSError as exc:
+            st.sidebar.error(f"Ticker symbols could not be saved: {exc}")
 symbols = list(dict.fromkeys(
     symbol.strip().upper()
     for symbol in symbols_text.replace("\n", ",").split(",")
@@ -2367,6 +2501,10 @@ if st.session_state["selected_main_page"] != "Top 20":
                 )
             except OSError as exc:
                 st.error(f"Ticker symbols could not be saved: {exc}")
+
+if not symbols and st.session_state["selected_main_page"] == "TSP Historical Trends":
+    render_tsp_without_watchlist()
+    st.stop()
 
 if not symbols:
     st.info(
@@ -3700,10 +3838,12 @@ with tsp_tab:
         tsp_funds = [column for column in tsp_history.columns if column != "Date"]
         tsp_fund, tsp_start = st.columns([1, 1.25])
         with tsp_fund:
-            selected_tsp_fund = st.selectbox(
-                "TSP fund",
+            selected_tsp_funds = st.multiselect(
+                "TSP funds",
                 tsp_funds,
-                key="selected_tsp_fund",
+                default=[tsp_funds[0]],
+                key="selected_tsp_funds",
+                help="Check one or more funds to compare them on the chart.",
             )
 
         today = datetime.date.today()
@@ -3725,39 +3865,54 @@ with tsp_tab:
             f"Data source: {tsp_source}"
         )
 
+        if not selected_tsp_funds:
+            st.info("Check at least one TSP fund to display its trend.")
+            st.session_state["selected_tsp_funds"] = [tsp_funds[0]]
+            st.rerun()
         tsp_filtered = tsp_history.loc[
             (tsp_history["Date"].dt.date >= selected_tsp_start)
             & (tsp_history["Date"].dt.date <= today),
-            ["Date", selected_tsp_fund],
-        ].dropna()
+            ["Date", *selected_tsp_funds],
+        ].dropna(subset=selected_tsp_funds, how="all")
         if tsp_filtered.empty:
             st.info("No published prices are available in that date range.")
         else:
-            first_price = float(tsp_filtered[selected_tsp_fund].iloc[0])
-            latest_price = float(tsp_filtered[selected_tsp_fund].iloc[-1])
+            primary_tsp_fund = selected_tsp_funds[0]
+            primary_tsp_prices = tsp_filtered[primary_tsp_fund].dropna()
+            first_price = float(primary_tsp_prices.iloc[0])
+            latest_price = float(primary_tsp_prices.iloc[-1])
             total_change = (
                 ((latest_price / first_price) - 1) * 100 if first_price else 0.0
             )
             latest_data_date = tsp_filtered["Date"].iloc[-1].date()
             price_column, change_column, date_column = st.columns(3)
-            price_column.metric("Latest share price", f"${latest_price:,.4f}")
-            change_column.metric("Change in selected range", f"{total_change:+.2f}%")
+            price_column.metric(
+                f"{primary_tsp_fund} latest share price", f"${latest_price:,.4f}"
+            )
+            change_column.metric(
+                f"{primary_tsp_fund} range change", f"{total_change:+.2f}%"
+            )
             date_column.metric("Latest published date", latest_data_date.strftime("%d %b %Y"))
 
             tsp_chart = go.Figure()
-            tsp_chart.add_trace(
-                go.Scatter(
-                    x=tsp_filtered["Date"],
-                    y=tsp_filtered[selected_tsp_fund],
-                    mode="lines",
-                    name=selected_tsp_fund,
-                    line={"color": "#2563eb", "width": 2.5},
-                    hovertemplate="%{x|%d %b %Y}<br>$%{y:.4f}<extra></extra>",
+            for fund_name in selected_tsp_funds:
+                tsp_chart.add_trace(
+                    go.Scatter(
+                        x=tsp_filtered["Date"],
+                        y=tsp_filtered[fund_name],
+                        mode="lines",
+                        name=fund_name,
+                        line={"width": 2.5},
+                        hovertemplate=(
+                            f"{fund_name}<br>%{{x|%d %b %Y}}<br>"
+                            "$%{y:.4f}<extra></extra>"
+                        ),
+                    )
                 )
-            )
             tsp_chart.update_layout(
                 title=(
-                    f"{selected_tsp_fund}: {selected_tsp_start.strftime('%d %b %Y')}–"
+                    f"{', '.join(selected_tsp_funds)}: "
+                    f"{selected_tsp_start.strftime('%d %b %Y')}–"
                     f"{today.strftime('%d %b %Y')}"
                 ),
                 template="plotly_white",
@@ -3797,7 +3952,7 @@ with tsp_tab:
                 )
             fund_price_table = pd.DataFrame(fund_price_rows)
 
-            tsp_chart_column, tsp_prices_column = st.columns([3.25, 1], gap="medium")
+            tsp_chart_column, tsp_prices_column = st.columns([2.15, 1.25], gap="medium")
             with tsp_chart_column:
                 st.plotly_chart(tsp_chart, use_container_width=True)
             with tsp_prices_column:
@@ -3823,19 +3978,6 @@ with tsp_tab:
                     },
                 )
 
-            with st.expander("View historical prices"):
-                tsp_table = tsp_filtered.sort_values("Date", ascending=False).copy()
-                tsp_table["Date"] = tsp_table["Date"].dt.strftime("%d %b %Y")
-                st.dataframe(
-                    tsp_table,
-                    hide_index=True,
-                    use_container_width=True,
-                    column_config={
-                        selected_tsp_fund: st.column_config.NumberColumn(
-                            "Share price", format="$%.4f"
-                        )
-                    },
-                )
     except Exception as exc:
         st.warning(str(exc))
         if st.button("Try loading TSP data again", key="retry_tsp_history"):
