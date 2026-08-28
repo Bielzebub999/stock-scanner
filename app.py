@@ -1573,7 +1573,18 @@ if is_streamlit_cloud():
         default="",
     )
     if stored_browser_watchlist:
-        st.session_state["_browser_local_watchlist"] = str(stored_browser_watchlist)
+        stored_browser_watchlist = str(stored_browser_watchlist).strip()
+        previous_local_watchlist = st.session_state.get("_browser_local_watchlist", "")
+        st.session_state["_browser_local_watchlist"] = stored_browser_watchlist
+        # Browser-local storage is the authoritative web watchlist. It can arrive one
+        # rerun after an older fallback cookie, especially in iPhone Safari.
+        if (
+            not pending_browser_watchlist
+            and stored_browser_watchlist
+            and stored_browser_watchlist != previous_local_watchlist
+        ):
+            st.session_state["symbols_text"] = stored_browser_watchlist
+            st.session_state["_browser_watchlist_loaded"] = True
         if pending_browser_watchlist == stored_browser_watchlist:
             st.session_state.pop("_pending_browser_watchlist", None)
 main_pages = [
@@ -1698,6 +1709,14 @@ symbols_text = st.sidebar.text_area(
     key="symbols_text",
     on_change=normalize_symbols_text,
 )
+if st.sidebar.button(
+    "Save symbols",
+    icon=":material/save:",
+    key="save_watchlist_symbols",
+    use_container_width=True,
+    on_click=normalize_symbols_text,
+):
+    pass
 symbols = list(dict.fromkeys(
     symbol.strip().upper()
     for symbol in symbols_text.replace("\n", ",").split(",")
