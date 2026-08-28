@@ -139,9 +139,9 @@ def render_tsp_fund_price_table(history: pd.DataFrame, funds: list[str]) -> None
         prior = float(prices[fund_name].iloc[-2]) if len(prices) > 1 else latest
         move = latest - prior
         if move > 0:
-            arrow = '<span class="tsp-change-up">↑</span>'
+            arrow = '<span class="tsp-change-up">⬆︎</span>'
         elif move < 0:
-            arrow = '<span class="tsp-change-down">↓</span>'
+            arrow = '<span class="tsp-change-down">⬇︎</span>'
         else:
             arrow = '<span class="tsp-change-flat">→</span>'
         rows.append(
@@ -163,7 +163,7 @@ def render_tsp_fund_price_table(history: pd.DataFrame, funds: list[str]) -> None
         }
         .tsp-price-table th, .tsp-price-table td {
             padding: 0.48rem 0.38rem;
-            border-bottom: 1px solid #dbeafe;
+            border-bottom: 1px solid light-dark(#dbeafe, #334155);
             text-align: right;
             white-space: nowrap;
         }
@@ -172,14 +172,21 @@ def render_tsp_fund_price_table(history: pd.DataFrame, funds: list[str]) -> None
             font-weight: 600;
         }
         .tsp-price-table th {
-            color: #334155;
+            color: light-dark(#334155, #e2e8f0);
             font-weight: 700;
-            background: #eff6ff;
+            background: light-dark(#eff6ff, #1e293b);
         }
         .tsp-price-table .tsp-move-cell { font-weight: 600; }
-        .tsp-change-up { color: #16a34a; font-size: 1.25rem; }
-        .tsp-change-down { color: #dc2626; font-size: 1.25rem; }
-        .tsp-change-flat { color: #64748b; font-size: 1.25rem; }
+        .tsp-change-up, .tsp-change-down, .tsp-change-flat {
+            display: inline-block;
+            font-size: 1.35rem;
+            font-weight: 900;
+            line-height: 0.8;
+            transform: scaleX(1.12);
+        }
+        .tsp-change-up { color: #16a34a; }
+        .tsp-change-down { color: #dc2626; }
+        .tsp-change-flat { color: light-dark(#64748b, #94a3b8); }
         </style>
         <table class="tsp-price-table">
           <thead><tr><th>Fund</th><th>Latest</th><th>Prior</th><th>Change</th></tr></thead>
@@ -1131,7 +1138,8 @@ def format_research_value(value, kind: str = "number") -> str:
 
 def dataframe_height(dataframe: pd.DataFrame, extra_rows: int = 0) -> int:
     """Fit the larger header, every data row, and the bottom scrollbar."""
-    return 40 * (len(dataframe) + 1 + extra_rows) + 24
+    fitted_height = 40 * (len(dataframe) + 1 + extra_rows) + 24
+    return min(fitted_height, 640)
 
 
 def trend_label(score: int) -> str:
@@ -1795,7 +1803,6 @@ main_pages = [
     "Alpaca Live Market Data",
     "Catalysts",
     "Premarket",
-    "Trends",
     "Momentum",
     "Oversold Reversals",
     "Purchase Grade",
@@ -2086,10 +2093,11 @@ st.html(
     """
     <style>
     .stApp {
+        color-scheme: light dark;
         background:
             radial-gradient(circle at 88% 8%, rgba(59, 130, 246, 0.12), transparent 24rem),
             radial-gradient(circle at 12% 92%, rgba(34, 197, 94, 0.10), transparent 26rem),
-            #f8fafc;
+            light-dark(#f8fafc, #0f172a);
     }
     .st-key-native_watchlist_navigation {
         position: sticky;
@@ -2148,8 +2156,11 @@ st.html(
         }
     }
     section[data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #eef6ff 0%, #f2fff7 52%, #fff8ed 100%);
-        border-right: 1px solid #bfd7f5;
+        background: light-dark(
+            linear-gradient(180deg, #eef6ff 0%, #f2fff7 52%, #fff8ed 100%),
+            linear-gradient(180deg, #111827 0%, #13251f 52%, #292016 100%)
+        );
+        border-right: 1px solid light-dark(#bfd7f5, #334155);
         overflow-x: hidden !important;
     }
     section[data-testid="stSidebar"] > div {
@@ -2164,8 +2175,8 @@ st.html(
     .st-key-sidebar_watchlist_card,
     .st-key-sidebar_momentum_card,
     .st-key-sidebar_oversold_card {
-        background: rgba(255, 255, 255, 0.82);
-        border: 1px solid rgba(147, 197, 253, 0.72);
+        background: light-dark(rgba(255, 255, 255, 0.82), rgba(15, 23, 42, 0.88));
+        border: 1px solid light-dark(rgba(147, 197, 253, 0.72), rgba(71, 85, 105, 0.9));
         border-radius: 14px;
         padding: 0.75rem 0.8rem 0.85rem;
         margin: 0.55rem 0 0.7rem;
@@ -2176,14 +2187,14 @@ st.html(
     .st-key-sidebar_oversold_card h3 {
         margin: 0 0 0.55rem !important;
         padding: 0 0 0.35rem !important;
-        color: #164e63 !important;
+        color: light-dark(#164e63, #bae6fd) !important;
         font-size: 1.05rem !important;
         border-bottom: 1px solid rgba(14, 165, 233, 0.24) !important;
     }
     .st-key-sidebar_watchlist_card textarea {
-        background: #ffffff !important;
-        color: #172033 !important;
-        border-color: #93c5fd !important;
+        background: light-dark(#ffffff, #111827) !important;
+        color: light-dark(#172033, #f8fafc) !important;
+        border-color: light-dark(#93c5fd, #475569) !important;
         border-radius: 10px !important;
         font-size: 0.95rem !important;
         line-height: 1.45 !important;
@@ -2193,20 +2204,20 @@ st.html(
         box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.13) !important;
     }
     .st-key-sidebar_watchlist_card textarea::placeholder {
-        color: #64748b !important;
+        color: light-dark(#64748b, #94a3b8) !important;
         opacity: 1 !important;
     }
     .st-key-sidebar_watchlist_card [data-testid="stWidgetLabel"] p,
     .st-key-sidebar_momentum_card [data-testid="stWidgetLabel"] p,
     .st-key-sidebar_oversold_card [data-testid="stWidgetLabel"] p,
     .st-key-sidebar_oversold_card label p {
-        color: #334155 !important;
+        color: light-dark(#334155, #e2e8f0) !important;
         opacity: 1 !important;
         font-weight: 600 !important;
     }
     .st-key-sidebar_momentum_card [data-testid="stSlider"] p,
     .st-key-sidebar_oversold_card [data-testid="stSlider"] p {
-        color: #475569 !important;
+        color: light-dark(#475569, #cbd5e1) !important;
         opacity: 1 !important;
     }
     .st-key-sidebar_scan_action {
@@ -2230,7 +2241,7 @@ st.html(
         margin: 0 !important;
     }
     section[data-testid="stSidebar"] h3 {
-        color: #155e75;
+        color: light-dark(#155e75, #bae6fd);
         border-bottom: 2px solid rgba(14, 165, 233, 0.28);
         padding-bottom: 0.25rem;
     }
@@ -2255,7 +2266,7 @@ st.html(
         padding-top: 0.15rem;
     }
     .scanner-main-subtitle {
-        color: #64748b;
+        color: light-dark(#64748b, #cbd5e1);
         font-size: 0.95rem;
         text-align: center;
         margin-top: .5rem;
@@ -2279,11 +2290,14 @@ div[data-testid="stVerticalBlock"] {
         margin-top: 1.75rem;
     }
     h2, h3 {
-        color: #1e3a8a;
+        color: light-dark(#1e3a8a, #bfdbfe);
     }
     div[data-testid="stMetric"] {
-        background: linear-gradient(135deg, #ffffff, #eff6ff);
-        border: 1px solid #bfdbfe;
+        background: light-dark(
+            linear-gradient(135deg, #ffffff, #eff6ff),
+            linear-gradient(135deg, #111827, #172554)
+        );
+        border: 1px solid light-dark(#bfdbfe, #334155);
         border-left: 5px solid #3b82f6;
         border-radius: 12px;
         padding: 0.7rem 0.9rem;
@@ -2291,11 +2305,17 @@ div[data-testid="stVerticalBlock"] {
     }
     div[data-testid="stMetric"]:nth-of-type(2) {
         border-left-color: #22c55e;
-        background: linear-gradient(135deg, #ffffff, #f0fdf4);
+        background: light-dark(
+            linear-gradient(135deg, #ffffff, #f0fdf4),
+            linear-gradient(135deg, #111827, #143322)
+        );
     }
     div[data-testid="stMetric"]:nth-of-type(3) {
         border-left-color: #f59e0b;
-        background: linear-gradient(135deg, #ffffff, #fffbeb);
+        background: light-dark(
+            linear-gradient(135deg, #ffffff, #fffbeb),
+            linear-gradient(135deg, #111827, #3b2a12)
+        );
     }
     div[data-testid="stButton"] button,
     div[data-testid="stPopover"] button {
@@ -2403,12 +2423,17 @@ div[data-testid="stVerticalBlock"] {
         border-left-width: 5px;
     }
     div[data-testid="stDataFrame"] {
-        border: 1px solid #bfdbfe;
+        border: 1px solid light-dark(#bfdbfe, #334155);
         border-radius: 12px;
         overflow: hidden;
         box-shadow: 0 4px 14px rgba(15, 23, 42, 0.06);
         font-size: 1rem;
-        background: #ffffff;
+        background: light-dark(#ffffff, #111827);
+    }
+    div[data-testid="stDataFrame"] [role="columnheader"] {
+        white-space: normal !important;
+        overflow-wrap: anywhere !important;
+        line-height: 1.15 !important;
     }
     .st-key-floating_scan_controls {
         position: fixed;
@@ -2777,7 +2802,6 @@ all_tab = page_tabs["My Watchlist"]
 alpaca_tab = page_tabs["Alpaca Live Market Data"]
 catalyst_tab = page_tabs["Catalysts"]
 premarket_tab = page_tabs["Premarket"]
-trends_tab = page_tabs["Trends"]
 momentum_tab = page_tabs["Momentum"]
 oversold_tab = page_tabs["Oversold Reversals"]
 purchase_grade_tab = page_tabs["Purchase Grade"]
@@ -2850,7 +2874,14 @@ with oversold_tab:
         column_config,
     )
 
-with trends_tab:
+with all_tab:
+    st.markdown("### My Watchlist Results")
+    render_removable_stock_table(
+        results_df,
+        "all_results_remove_table",
+        column_config,
+    )
+    st.markdown("### Trends and Charts")
     st.write(
         "Select any cell to open the combined price, trend, MACD, volume, and RVOL view."
     )
@@ -3482,13 +3513,6 @@ with top_graded_tab:
                     )
         except Exception as exc:
             st.warning(f"The all-stocks scan could not be completed right now: {exc}")
-
-with all_tab:
-    render_removable_stock_table(
-        results_df,
-        "all_results_remove_table",
-        column_config,
-    )
 
 with alpaca_tab:
     st.caption(
