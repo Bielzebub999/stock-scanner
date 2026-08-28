@@ -1,6 +1,7 @@
 <script>
 (() => {
-  const STORAGE_KEY = "stock_scanner_watchlist_v1";
+  const STORAGE_KEY = "stock_scanner_preferences_v2";
+  const LEGACY_WATCHLIST_KEY = "stock_scanner_watchlist_v1";
   let lastRender = "";
 
   const storage = (() => {
@@ -20,27 +21,41 @@
   }, "*");
 
   const returnValue = (value) => {
-    if (value) {
-      send("streamlit:setComponentValue", { value });
-    }
+    send("streamlit:setComponentValue", { value });
     send("streamlit:setFrameHeight", { height: 0 });
+  };
+
+  const readPreferences = () => {
+    try {
+      const parsed = JSON.parse(storage.getItem(STORAGE_KEY) || "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        if (!parsed.symbols) {
+          parsed.symbols = storage.getItem(LEGACY_WATCHLIST_KEY) || "";
+        }
+        return parsed;
+      }
+    } catch (_) {}
+    return { symbols: storage.getItem(LEGACY_WATCHLIST_KEY) || "" };
   };
 
   window.addEventListener("message", event => {
     if (event.data?.type !== "streamlit:render") return;
     const action = event.data.args?.action || "read";
-    const symbols = String(event.data.args?.symbols || "").trim();
-    const signature = `${action}:${symbols}`;
+    const incoming = event.data.args?.preferences || {};
+    const signature = `${action}:${JSON.stringify(incoming)}`;
     if (signature === lastRender) return;
     lastRender = signature;
 
     try {
-      if (action === "write" && symbols) {
-        storage.setItem(STORAGE_KEY, symbols);
+      if (action === "write" && incoming && typeof incoming === "object") {
+        storage.setItem(STORAGE_KEY, JSON.stringify(incoming));
+        if (incoming.symbols) {
+          storage.setItem(LEGACY_WATCHLIST_KEY, String(incoming.symbols));
+        }
       }
-      returnValue(storage.getItem(STORAGE_KEY) || symbols);
+      returnValue(readPreferences());
     } catch (_) {
-      returnValue(symbols);
+      returnValue(incoming);
     }
   });
 
