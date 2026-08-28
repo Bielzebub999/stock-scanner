@@ -2466,29 +2466,25 @@ if not graded_df.empty:
     )
 
 selected_main_page = st.session_state["selected_main_page"]
-selected_page_index = main_pages.index(selected_main_page)
-# Changing this invisible marker gives the hidden tabs a fresh identity, ensuring
-# the hamburger choice becomes the active panel after every click.
-internal_page_labels = [
-    page_name + ("\u200b" * (selected_page_index + 1) if index == selected_page_index else "")
-    for index, page_name in enumerate(main_pages)
+# Put the requested page first so navigation never depends on Streamlit restoring
+# a hidden tab's previous selection. This also avoids conflicts with nested tabs
+# inside pages such as Autopilot Research.
+ordered_main_pages = [selected_main_page] + [
+    page_name for page_name in main_pages if page_name != selected_main_page
 ]
-selected_internal_label = internal_page_labels[selected_page_index]
-
-(
-    all_tab,
-    alpaca_tab,
-    catalyst_tab,
-    premarket_tab,
-    trends_tab,
-    momentum_tab,
-    oversold_tab,
-    purchase_grade_tab,
-    autopilot_tab,
-    research_tab,
-    top_graded_tab,
-    settings_tab,
-) = st.tabs(internal_page_labels, default=selected_internal_label)
+page_tabs = dict(zip(ordered_main_pages, st.tabs(ordered_main_pages)))
+all_tab = page_tabs["My Watchlist"]
+alpaca_tab = page_tabs["Alpaca Live Market Data"]
+catalyst_tab = page_tabs["Catalysts"]
+premarket_tab = page_tabs["Premarket"]
+trends_tab = page_tabs["Trends"]
+momentum_tab = page_tabs["Momentum"]
+oversold_tab = page_tabs["Oversold Reversals"]
+purchase_grade_tab = page_tabs["Purchase Grade"]
+autopilot_tab = page_tabs["Autopilot Research"]
+research_tab = page_tabs["Company Research"]
+top_graded_tab = page_tabs["Top 20"]
+settings_tab = page_tabs["Settings"]
 
 display_columns = [
     "Symbol", "Price", "Daily %", "RSI", "Relative volume", "Volume spike %", "SMA20", "SMA50"
