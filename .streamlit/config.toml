@@ -1,13 +1,2 @@
-[theme]
-base = "light"
-primaryColor = "#2563eb"
-backgroundColor = "#f8fafc"
-secondaryBackgroundColor = "#eef6ff"
-textColor = "#172033"
-linkColor = "#2563eb"
-borderColor = "#bfdbfe"
-showWidgetBorder = true
-baseRadius = "medium"
-
 [browser]
 gatherUsageStats = false
