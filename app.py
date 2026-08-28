@@ -743,12 +743,12 @@ def render_stock_selector_table(
         column_config=column_config or {},
         key=selector_key,
         on_select="rerun",
-        selection_mode="single-cell",
+        selection_mode="single-row",
     )
-    selected_cells = selection.selection.cells
+    selected_rows = selection.selection.rows
     selected_symbol = (
-        display.iloc[selected_cells[0][0]]["Symbol"]
-        if selected_cells
+        display.iloc[selected_rows[0]]["Symbol"]
+        if selected_rows
         else display.iloc[0]["Symbol"]
     )
     st.button(
@@ -2899,7 +2899,7 @@ with oversold_tab:
 with all_tab:
     st.markdown("### My Watchlist Results")
     st.write(
-        "Select any cell in the table to open that stock's combined price, trend, "
+        "Select any stock row to open its combined price, trend, "
         "MACD, volume, and RVOL chart below."
     )
     premarket_volume_by_symbol = (
@@ -2928,7 +2928,7 @@ with all_tab:
         height=dataframe_height(trend_display),
         key="trends_interactive_table",
         on_select="rerun",
-        selection_mode="single-cell",
+        selection_mode="single-row",
         column_config={
             **column_config,
             "RVOL": st.column_config.NumberColumn(format="%.2fx"),
@@ -2936,10 +2936,10 @@ with all_tab:
         },
     )
 
-    selected_trend_cells = trend_selection.selection.cells
+    selected_trend_rows = trend_selection.selection.rows
     pattern_symbol = (
-        trend_display.iloc[selected_trend_cells[0][0]]["Symbol"]
-        if selected_trend_cells
+        trend_display.iloc[selected_trend_rows[0]]["Symbol"]
+        if selected_trend_rows
         else None
     )
     st.button(
@@ -2950,7 +2950,7 @@ with all_tab:
         args=([pattern_symbol] if pattern_symbol else [],),
     )
     if not pattern_symbol:
-        st.info("Click any cell in a stock row to display its combined live chart.")
+        st.info("Click a stock row to display its combined live chart.")
     else:
         with st.spinner(f"Loading all available history for {pattern_symbol}…"):
             trend_history = get_long_term_history(pattern_symbol)
@@ -3312,7 +3312,7 @@ with purchase_grade_tab:
             height=dataframe_height(grade_summary),
             key="purchase_grade_table",
             on_select="rerun",
-            selection_mode="single-cell",
+            selection_mode="single-row",
             column_config={
                 **column_config,
                 "Score": st.column_config.ProgressColumn(
@@ -3324,10 +3324,10 @@ with purchase_grade_tab:
             },
         )
 
-        selected_grade_cells = grade_selection.selection.cells
+        selected_grade_rows = grade_selection.selection.rows
         purchase_symbol = (
-            grade_summary.iloc[selected_grade_cells[0][0]]["Symbol"]
-            if selected_grade_cells
+            grade_summary.iloc[selected_grade_rows[0]]["Symbol"]
+            if selected_grade_rows
             else None
         )
         st.button(
@@ -3499,7 +3499,7 @@ with top_graded_tab:
                         height=dataframe_height(qualifying_grades),
                         key="all_stocks_grade_table",
                         on_select="rerun",
-                        selection_mode="single-cell",
+                        selection_mode="single-row",
                         column_config={
                             **column_config,
                             "Score": st.column_config.ProgressColumn(
@@ -3510,10 +3510,10 @@ with top_graded_tab:
                             ),
                         },
                     )
-                    broad_cells = broad_selection.selection.cells
+                    broad_rows = broad_selection.selection.rows
                     selected_broad_symbol = (
-                        display_qualifying_grades.iloc[broad_cells[0][0]]["Symbol"]
-                        if broad_cells
+                        display_qualifying_grades.iloc[broad_rows[0]]["Symbol"]
+                        if broad_rows
                         else None
                     )
                     st.button(
@@ -3694,7 +3694,7 @@ with autopilot_tab:
                     height=min(dataframe_height(congress_trades), 650),
                     key="autopilot_congress_table",
                     on_select="rerun",
-                    selection_mode="single-cell",
+                    selection_mode="single-row",
                     column_config={
                         "Official disclosure": st.column_config.LinkColumn(
                             "Official disclosure",
@@ -3702,10 +3702,10 @@ with autopilot_tab:
                         ),
                     },
                 )
-                congress_cells = congress_selection.selection.cells
+                congress_rows = congress_selection.selection.rows
                 congress_symbol = (
-                    congress_trades.iloc[congress_cells[0][0]]["Ticker"]
-                    if congress_cells
+                    congress_trades.iloc[congress_rows[0]]["Ticker"]
+                    if congress_rows
                     else None
                 )
                 st.button(
