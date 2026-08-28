@@ -424,21 +424,25 @@ def save_browser_credentials(
 
 
 def forget_browser_credentials(include_alpaca: bool = True, include_sec: bool = True) -> None:
-    if browser_cookie_manager is None:
-        return
+    preferences = load_preferences()
     cookie_names = []
     state_keys = []
     if include_alpaca:
         cookie_names.extend((BROWSER_ALPACA_KEY_COOKIE, BROWSER_ALPACA_SECRET_COOKIE))
         state_keys.extend(("alpaca_api_key", "alpaca_api_secret"))
+        preferences["alpaca_api_key"] = ""
+        preferences["alpaca_api_secret"] = ""
     if include_sec:
         cookie_names.append(BROWSER_SEC_EMAIL_COOKIE)
         state_keys.append("sec_contact_email")
+        preferences["sec_contact_email"] = ""
+    write_preferences(preferences)
     for cookie_name in cookie_names:
-        try:
-            browser_cookie_manager.delete(cookie_name, key=f"forget_{cookie_name}")
-        except Exception:
-            pass
+        if browser_cookie_manager is not None:
+            try:
+                browser_cookie_manager.delete(cookie_name, key=f"forget_{cookie_name}")
+            except Exception:
+                pass
     for state_key in state_keys:
         st.session_state[state_key] = ""
 
@@ -1774,29 +1778,46 @@ if is_streamlit_cloud() and stx is not None:
         st.session_state.get("_browser_cookie_sync_passes", 0) + 1
     )
 if is_streamlit_cloud():
-    pending_browser_watchlist = st.session_state.get("_pending_browser_watchlist", "")
-    stored_browser_watchlist = browser_preferences_component(
-        action="write" if pending_browser_watchlist else "read",
-        symbols=pending_browser_watchlist,
-        key="browser_watchlist_storage",
-        default="",
+    pending_browser_preferences = st.session_state.get(
+        "_pending_browser_preferences", {}
     )
-    if stored_browser_watchlist:
-        stored_browser_watchlist = str(stored_browser_watchlist).strip()
+    stored_browser_preferences = browser_preferences_component(
+        action="write" if pending_browser_preferences else "read",
+        preferences=pending_browser_preferences,
+        key="browser_watchlist_storage",
+        default={},
+    )
+    if isinstance(stored_browser_preferences, str):
+        stored_browser_preferences = {"symbols": stored_browser_preferences}
+    if isinstance(stored_browser_preferences, dict) and stored_browser_preferences:
+        stored_browser_preferences = {
+            str(key): str(value).strip()
+            for key, value in stored_browser_preferences.items()
+            if value is not None
+        }
+        st.session_state["_browser_preferences"] = stored_browser_preferences
+        stored_browser_watchlist = stored_browser_preferences.get("symbols", "")
         previous_local_watchlist = st.session_state.get("_browser_local_watchlist", "")
-        st.session_state["_browser_local_watchlist"] = stored_browser_watchlist
+        if stored_browser_watchlist:
+            st.session_state["_browser_local_watchlist"] = stored_browser_watchlist
         # Browser-local storage is the authoritative web watchlist. It can arrive one
         # rerun after an older fallback cookie, especially in iPhone Safari.
         if (
-            not pending_browser_watchlist
+            not pending_browser_preferences
             and stored_browser_watchlist
             and stored_browser_watchlist != previous_local_watchlist
             and not st.session_state.get("symbols_text", "").strip()
         ):
             st.session_state["symbols_text"] = stored_browser_watchlist
             st.session_state["_browser_watchlist_loaded"] = True
-        if pending_browser_watchlist == stored_browser_watchlist:
-            st.session_state.pop("_pending_browser_watchlist", None)
+        for preference_key in (
+            "sec_contact_email", "alpaca_api_key", "alpaca_api_secret"
+        ):
+            stored_value = stored_browser_preferences.get(preference_key, "")
+            if stored_value and not st.session_state.get(preference_key, "").strip():
+                st.session_state[preference_key] = stored_value
+        if pending_browser_preferences == stored_browser_preferences:
+            st.session_state.pop("_pending_browser_preferences", None)
 main_pages = [
     "My Watchlist",
     "Alpaca Live Market Data",
@@ -4083,6 +4104,9 @@ with tsp_tab:
             st.rerun()
 
 with settings_tab:
+    settings_saved_message = st.session_state.pop("settings_saved_message", "")
+    if settings_saved_message:
+        st.success(settings_saved_message)
     if st.query_params.get("focus") == "alpaca":
         st.info(
             "Enter both Alpaca credentials in the Alpaca section below, then choose "
@@ -4126,8 +4150,11 @@ with settings_tab:
                     else:
                         try:
                             save_browser_credentials(sec_contact_email=sec_contact_email)
-                            st.success("Saved in this browser.")
+                            st.session_state["settings_saved_message"] = (
+                                "SEC email saved in this browser."
+                            )
                             st.query_params.pop("focus", None)
+                            st.rerun()
                         except OSError as exc:
                             st.error(str(exc))
             elif st.button(
@@ -4209,6 +4236,9 @@ with settings_tab:
                                 alpaca_api_key=alpaca_key,
                                 alpaca_api_secret=alpaca_secret,
                             )
-                            st.success("Saved in this browser.")
+                            st.session_state["settings_saved_message"] = (
+                                "Alpaca credentials saved in this browser."
+                            )
+                            st.rerun()
                         except OSError as exc:
                             st.error(str(exc))
