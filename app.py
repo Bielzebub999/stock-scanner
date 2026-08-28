@@ -23,10 +23,7 @@ except ImportError:
     stx = None
 
 
-DEFAULT_SYMBOLS = [
-    "AAPL", "MSFT", "NVDA", "AMZN", "GOOGL",
-    "TSLA", "BTC"
-]
+DEFAULT_SYMBOLS = []
 LEGACY_PREFERENCES_FILE = Path(__file__).with_name("preferences.json")
 PREFERENCES_FILE = (
     Path.home()
@@ -151,7 +148,10 @@ def write_preferences(preferences: dict) -> None:
                 browser_cookie_manager.set(
                     BROWSER_WATCHLIST_COOKIE,
                     saved_symbols,
+                    key="save_stock_scanner_watchlist",
                     expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
+                    secure=True,
+                    same_site="strict",
                 )
                 st.session_state["_browser_watchlist_cookie"] = saved_symbols
             except Exception:
