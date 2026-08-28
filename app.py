@@ -128,6 +128,69 @@ def load_tsp_history() -> tuple[pd.DataFrame, str]:
     raise RuntimeError(f"TSP history is temporarily unavailable: {last_error}")
 
 
+def render_tsp_fund_price_table(history: pd.DataFrame, funds: list[str]) -> None:
+    """Render a compact current-versus-prior TSP price table."""
+    rows = []
+    for fund_name in funds:
+        prices = history[["Date", fund_name]].dropna().sort_values("Date")
+        if prices.empty:
+            continue
+        latest = float(prices[fund_name].iloc[-1])
+        prior = float(prices[fund_name].iloc[-2]) if len(prices) > 1 else latest
+        move = latest - prior
+        if move > 0:
+            arrow = '<span class="tsp-change-up">↑</span>'
+        elif move < 0:
+            arrow = '<span class="tsp-change-down">↓</span>'
+        else:
+            arrow = '<span class="tsp-change-flat">→</span>'
+        rows.append(
+            "<tr>"
+            f"<td>{fund_name}</td>"
+            f"<td>${latest:.4f}</td>"
+            f"<td>${prior:.4f}</td>"
+            f'<td class="tsp-move-cell">{arrow} ${abs(move):.4f}</td>'
+            "</tr>"
+        )
+    st.markdown(
+        """
+        <style>
+        .tsp-price-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 1rem;
+            line-height: 1.3;
+        }
+        .tsp-price-table th, .tsp-price-table td {
+            padding: 0.48rem 0.38rem;
+            border-bottom: 1px solid #dbeafe;
+            text-align: right;
+            white-space: nowrap;
+        }
+        .tsp-price-table th:first-child, .tsp-price-table td:first-child {
+            text-align: left;
+            font-weight: 600;
+        }
+        .tsp-price-table th {
+            color: #334155;
+            font-weight: 700;
+            background: #eff6ff;
+        }
+        .tsp-price-table .tsp-move-cell { font-weight: 600; }
+        .tsp-change-up { color: #16a34a; font-size: 1.25rem; }
+        .tsp-change-down { color: #dc2626; font-size: 1.25rem; }
+        .tsp-change-flat { color: #64748b; font-size: 1.25rem; }
+        </style>
+        <table class="tsp-price-table">
+          <thead><tr><th>Fund</th><th>Latest</th><th>Prior</th><th>Change</th></tr></thead>
+          <tbody>
+        """
+        + "".join(rows)
+        + "</tbody></table>",
+        unsafe_allow_html=True,
+    )
+
+
 def render_tsp_without_watchlist() -> None:
     """Render TSP research even when the stock watchlist is empty."""
     st.write(
@@ -202,34 +265,12 @@ def render_tsp_without_watchlist() -> None:
             yaxis_title="Share price ($)",
             hovermode="x unified",
         )
-        price_rows = []
-        for fund_name in funds:
-            prices = history[["Date", fund_name]].dropna().sort_values("Date")
-            if prices.empty:
-                continue
-            latest = float(prices[fund_name].iloc[-1])
-            prior = float(prices[fund_name].iloc[-2]) if len(prices) > 1 else latest
-            move = latest - prior
-            arrow = "🟢 ▲" if move > 0 else "🔴 ▼" if move < 0 else "⚪ —"
-            price_rows.append(
-                {"Fund": fund_name, "Latest": latest, "Prior": prior,
-                 "Move": f"{arrow} ${abs(move):.4f}"}
-            )
         chart_column, prices_column = st.columns([2.15, 1.25], gap="medium")
         with chart_column:
             st.plotly_chart(figure, use_container_width=True)
         with prices_column:
             st.markdown("#### Fund prices")
-            st.dataframe(
-                pd.DataFrame(price_rows),
-                hide_index=True,
-                use_container_width=True,
-                height=300,
-                column_config={
-                    "Latest": st.column_config.NumberColumn(format="$%.4f"),
-                    "Prior": st.column_config.NumberColumn(format="$%.4f"),
-                },
-            )
+            render_tsp_fund_price_table(history, funds)
     except Exception as exc:
         st.warning(str(exc))
 
@@ -3924,34 +3965,6 @@ with tsp_tab:
             )
             tsp_chart.update_xaxes(rangeslider_visible=False)
 
-            fund_price_rows = []
-            for fund_name in tsp_funds:
-                fund_prices = tsp_history[["Date", fund_name]].dropna().sort_values("Date")
-                if fund_prices.empty:
-                    continue
-                current_fund_price = float(fund_prices[fund_name].iloc[-1])
-                previous_fund_price = (
-                    float(fund_prices[fund_name].iloc[-2])
-                    if len(fund_prices) > 1
-                    else current_fund_price
-                )
-                fund_difference = current_fund_price - previous_fund_price
-                if fund_difference > 0:
-                    difference_display = f"🟢 ▲ ${abs(fund_difference):.4f}"
-                elif fund_difference < 0:
-                    difference_display = f"🔴 ▼ ${abs(fund_difference):.4f}"
-                else:
-                    difference_display = "⚪ — $0.0000"
-                fund_price_rows.append(
-                    {
-                        "Fund": fund_name,
-                        "Current": current_fund_price,
-                        "Previous": previous_fund_price,
-                        "Change": difference_display,
-                    }
-                )
-            fund_price_table = pd.DataFrame(fund_price_rows)
-
             tsp_chart_column, tsp_prices_column = st.columns([2.15, 1.25], gap="medium")
             with tsp_chart_column:
                 st.plotly_chart(tsp_chart, use_container_width=True)
@@ -3961,22 +3974,7 @@ with tsp_tab:
                     latest_close = tsp_history["Date"].iloc[-1].strftime("%d %b %Y")
                     previous_close = tsp_history["Date"].iloc[-2].strftime("%d %b %Y")
                     st.caption(f"{latest_close} compared with {previous_close}")
-                st.dataframe(
-                    fund_price_table,
-                    hide_index=True,
-                    use_container_width=True,
-                    height=300,
-                    column_config={
-                        "Fund": st.column_config.TextColumn("Fund", width="small"),
-                        "Current": st.column_config.NumberColumn(
-                            "Current", format="$%.4f", width="small"
-                        ),
-                        "Previous": st.column_config.NumberColumn(
-                            "Previous", format="$%.4f", width="small"
-                        ),
-                        "Change": st.column_config.TextColumn("Change", width="medium"),
-                    },
-                )
+                render_tsp_fund_price_table(tsp_history, tsp_funds)
 
     except Exception as exc:
         st.warning(str(exc))
