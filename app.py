@@ -463,6 +463,120 @@ def erase_selected_credentials(selection: str) -> None:
     st.session_state["credentials_erased_message"] = message
 
 
+def render_standalone_settings(cloud_deployment: bool) -> None:
+    """Render Settings without requiring watchlist symbols or market data."""
+    st.markdown("## Settings")
+    st.caption("Credentials are stored only on this Mac or in this browser.")
+
+    saved_message = st.session_state.pop("settings_saved_message", "")
+    if saved_message:
+        st.success(saved_message)
+
+    with st.expander("Erase saved credentials"):
+        erase_choice = st.selectbox(
+            "What should be erased?",
+            ["SEC email", "Alpaca API credentials", "Both"],
+            key="standalone_erase_choice",
+        )
+        if st.button("Erase selected credentials", type="secondary"):
+            erase_selected_credentials(erase_choice)
+            st.rerun()
+
+    sec_explanation, sec_form = st.columns([1.35, 1])
+    with sec_explanation:
+        st.markdown("### SEC search access")
+        st.write(
+            "The SEC asks automated tools to identify themselves with contact information. "
+            "The scanner uses this email only in requests sent to SEC.gov."
+        )
+    with sec_form:
+        with st.container(border=True):
+            st.markdown("#### SEC contact email")
+            sec_email_value = st.text_input(
+                "Email address",
+                placeholder="you@example.com",
+                key="standalone_sec_contact_email",
+                value=st.session_state.get("sec_contact_email", ""),
+            ).strip()
+            if st.button("Save SEC email", use_container_width=True):
+                if not sec_email_value or "@" not in sec_email_value:
+                    st.error("Enter a valid email address before saving.")
+                else:
+                    st.session_state["sec_contact_email"] = sec_email_value
+                    try:
+                        if cloud_deployment:
+                            save_browser_credentials(sec_contact_email=sec_email_value)
+                            st.session_state["settings_saved_message"] = (
+                                "SEC email saved in this browser."
+                            )
+                        else:
+                            save_email_preference(sec_email_value)
+                            st.session_state["settings_saved_message"] = "SEC email saved."
+                        st.rerun()
+                    except OSError as exc:
+                        st.error(f"The SEC email could not be saved: {exc}")
+
+    st.divider()
+    alpaca_explanation, alpaca_form = st.columns([1.35, 1])
+    with alpaca_explanation:
+        st.markdown("### Alpaca market-data access")
+        st.write(
+            "Use Paper Trading API credentials for live market-data research. "
+            "These credentials do not authorize this scanner to place trades."
+        )
+        st.link_button(
+            "Open Alpaca sign in",
+            "https://app.alpaca.markets/account/login",
+            use_container_width=True,
+        )
+    with alpaca_form:
+        with st.container(border=True):
+            st.markdown("#### Alpaca credentials")
+            alpaca_key_value = st.text_input(
+                "API key",
+                type="password",
+                key="standalone_alpaca_api_key",
+                value=st.session_state.get("alpaca_api_key", ""),
+            ).strip()
+            alpaca_secret_value = st.text_input(
+                "API secret",
+                type="password",
+                key="standalone_alpaca_api_secret",
+                value=st.session_state.get("alpaca_api_secret", ""),
+            ).strip()
+            st.radio(
+                "Market-data feed",
+                ["IEX — free, one exchange", "SIP — paid, all U.S. exchanges"],
+                key="alpaca_feed",
+            )
+            if st.button("Save Alpaca credentials", use_container_width=True):
+                if not alpaca_key_value or not alpaca_secret_value:
+                    st.error("Enter both Alpaca credentials before saving.")
+                else:
+                    st.session_state["alpaca_api_key"] = alpaca_key_value
+                    st.session_state["alpaca_api_secret"] = alpaca_secret_value
+                    try:
+                        if cloud_deployment:
+                            save_browser_credentials(
+                                alpaca_api_key=alpaca_key_value,
+                                alpaca_api_secret=alpaca_secret_value,
+                            )
+                            st.session_state["settings_saved_message"] = (
+                                "Alpaca credentials saved in this browser."
+                            )
+                        else:
+                            preferences = load_preferences()
+                            preferences["alpaca_api_key"] = alpaca_key_value
+                            preferences["alpaca_api_secret"] = alpaca_secret_value
+                            write_preferences(preferences)
+                            st.session_state["settings_saved_message"] = (
+                                "Alpaca credentials saved."
+                            )
+                        st.rerun()
+                    except OSError as exc:
+                        st.error(f"The Alpaca credentials could not be saved: {exc}")
+
+
 def add_symbol_to_watchlist(symbol: str) -> None:
     current_text = st.session_state.get("symbols_text", "")
     current_symbols = [
@@ -2667,7 +2781,7 @@ div[data-testid="stVerticalBlock"] {
     </style>
     """,
 )
-if st.session_state["selected_main_page"] != "Top 20":
+if st.session_state["selected_main_page"] not in ("Top 20", "Settings"):
     with st.container(key="floating_scan_controls"):
         if st.button("↻ Run scan again", type="primary", key="floating_run_scan"):
             st.session_state["run_scan"] = True
@@ -2680,6 +2794,10 @@ if st.session_state["selected_main_page"] != "Top 20":
                 )
             except OSError as exc:
                 st.error(f"Ticker symbols could not be saved: {exc}")
+
+if st.session_state["selected_main_page"] == "Settings":
+    render_standalone_settings(cloud_deployment)
+    st.stop()
 
 if not symbols and st.session_state["selected_main_page"] == "TSP Historical Trends":
     render_tsp_without_watchlist()
