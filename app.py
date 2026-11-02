@@ -589,7 +589,10 @@ def add_symbol_to_watchlist(symbol: str) -> None:
     if symbol not in current_symbols:
         current_symbols.append(symbol)
         updated_text = ", ".join(current_symbols)
-        st.session_state["symbols_text"] = updated_text
+        # The sidebar text area has already been rendered by the time a live-search
+        # result is returned. Apply its new value at the beginning of the next run;
+        # mutating the widget key here raises StreamlitAPIException.
+        st.session_state["_pending_symbols_text"] = updated_text
         try:
             save_symbol_preferences(updated_text)
             st.session_state["watchlist_message"] = (
@@ -689,6 +692,7 @@ Try these options:
         key="cancel_stock_lookup_warning",
         use_container_width=True,
     ):
+        st.session_state["stock_lookup_warning_shown"] = True
         st.rerun()
 
 
@@ -2092,6 +2096,12 @@ if "alpaca_api_secret" not in st.session_state or load_browser_credentials:
 if load_browser_credentials:
     st.session_state["_browser_credentials_loaded"] = True
 
+# Live search and other Add buttons run after the symbols widget is created.
+# Consume their queued update here, before creating that widget on this run.
+pending_symbols_text = st.session_state.pop("_pending_symbols_text", None)
+if pending_symbols_text is not None:
+    st.session_state["symbols_text"] = pending_symbols_text
+
 with st.sidebar.container(key="sidebar_watchlist_card"):
     st.markdown("### My symbols")
     symbols_text = st.text_area(
@@ -2192,13 +2202,9 @@ with st.container(key="floating_stock_search"):
                 key="stock_search_unavailable",
                 use_container_width=True,
             )
-            if open_lookup_warning or (
-                not st.session_state.get("stock_lookup_warning_shown", False)
-                and not (
-                    st.session_state["selected_main_page"] == "Alpaca Live Market Data"
-                    and alpaca_credentials_missing
-                )
-            ):
+            # Do not automatically reopen this dialog on every Streamlit rerun.
+            # The user can open it explicitly when they want troubleshooting help.
+            if open_lookup_warning:
                 st.session_state["stock_lookup_warning_shown"] = True
                 show_stock_lookup_unavailable_dialog()
 
