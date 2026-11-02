@@ -1436,6 +1436,47 @@ def download_yahoo_chart_history(symbol: str, range_name: str = "3y") -> pd.Data
     return frame
 
 
+def download_alpaca_daily_history(
+    symbol: str,
+    api_key: str,
+    api_secret: str,
+    feed: str = "iex",
+) -> pd.DataFrame:
+    """Use authenticated Alpaca bars when Yahoo is unavailable on Streamlit Cloud."""
+    start_date = datetime.date.today() - datetime.timedelta(days=1100)
+    encoded_symbol = quote(symbol, safe="-")
+    url = (
+        f"https://data.alpaca.markets/v2/stocks/{encoded_symbol}/bars"
+        f"?timeframe=1Day&start={start_date.isoformat()}T00%3A00%3A00Z"
+        f"&limit=1000&adjustment=all&feed={feed}&sort=asc"
+    )
+    request = Request(
+        url,
+        headers={
+            "APCA-API-KEY-ID": api_key,
+            "APCA-API-SECRET-KEY": api_secret,
+            "Accept": "application/json",
+        },
+    )
+    with urlopen(request, timeout=25) as response:
+        payload = json.load(response)
+    bars = payload.get("bars") or []
+    if not bars:
+        return pd.DataFrame()
+    frame = pd.DataFrame(
+        {
+            "Open": [bar.get("o") for bar in bars],
+            "High": [bar.get("h") for bar in bars],
+            "Low": [bar.get("l") for bar in bars],
+            "Close": [bar.get("c") for bar in bars],
+            "Volume": [bar.get("v") for bar in bars],
+        },
+        index=pd.to_datetime([bar.get("t") for bar in bars], utc=True).tz_localize(None),
+    )
+    frame.index.name = "Date"
+    return frame
+
+
 def prepare_indicator_history(data: pd.DataFrame) -> pd.DataFrame:
     if data.empty:
         return data
@@ -1460,7 +1501,12 @@ def prepare_indicator_history(data: pd.DataFrame) -> pd.DataFrame:
 
 
 @st.cache_data(ttl=900, show_spinner=False)
-def get_history(symbol: str) -> pd.DataFrame:
+def get_history(
+    symbol: str,
+    _alpaca_key: str = "",
+    _alpaca_secret: str = "",
+    alpaca_feed: str = "iex",
+) -> pd.DataFrame:
     try:
         data = yf.download(
             symbol,
@@ -1478,9 +1524,34 @@ def get_history(symbol: str) -> pd.DataFrame:
 
     # Streamlit Cloud can occasionally receive an empty/partial yfinance result.
     # A direct chart request avoids caching that transient response as valid data.
-    fallback = prepare_indicator_history(download_yahoo_chart_history(symbol))
-    if fallback.empty:
-        raise RuntimeError("Yahoo returned no daily price data")
+    yahoo_error = None
+    fallback = pd.DataFrame()
+    try:
+        fallback = prepare_indicator_history(download_yahoo_chart_history(symbol))
+        if len(fallback) >= 51:
+            return fallback
+    except Exception as exc:
+        yahoo_error = exc
+
+    if _alpaca_key and _alpaca_secret:
+        try:
+            alpaca_history = prepare_indicator_history(
+                download_alpaca_daily_history(
+                    symbol,
+                    _alpaca_key,
+                    _alpaca_secret,
+                    alpaca_feed,
+                )
+            )
+            if not alpaca_history.empty:
+                return alpaca_history
+        except Exception as exc:
+            raise RuntimeError(
+                f"Yahoo and Alpaca history requests failed ({exc})"
+            ) from exc
+
+    if yahoo_error is not None:
+        raise RuntimeError(f"Yahoo history request failed ({yahoo_error})") from yahoo_error
     return fallback
 
 
@@ -1644,8 +1715,16 @@ def scan_symbol(
     high_distance_percent: int,
     maximum_rsi: int,
     require_up_day: bool,
+    alpaca_key: str = "",
+    alpaca_secret: str = "",
+    alpaca_feed: str = "iex",
 ):
-    history = get_history(symbol)
+    history = get_history(
+        symbol,
+        _alpaca_key=alpaca_key,
+        _alpaca_secret=alpaca_secret,
+        alpaca_feed=alpaca_feed,
+    )
     result = analyze_history(
         symbol,
         history,
@@ -2182,6 +2261,10 @@ pending_live_search_symbol = st.session_state.pop(
 )
 if pending_live_search_symbol:
     add_symbol_to_watchlist(pending_live_search_symbol)
+    if cloud_deployment:
+        # The browser-storage component has already rendered on this pass.
+        # Rerun once so it immediately receives and writes the pending update.
+        st.rerun()
 pending_symbols_text = st.session_state.pop("_pending_symbols_text", None)
 if pending_symbols_text is not None:
     st.session_state["symbols_text"] = pending_symbols_text
@@ -2331,12 +2414,13 @@ with st.sidebar.container(key="sidebar_oversold_card"):
 with st.sidebar.container(key="sidebar_scan_action"):
     if st.button("Run scan again", type="primary", use_container_width=True):
         st.session_state["run_scan"] = True
+        get_history.clear()
         try:
             save_symbol_preferences(symbols_text)
+            if cloud_deployment:
+                st.rerun()
             st.success(
-                "Ticker symbols updated for this session."
-                if cloud_deployment
-                else "Ticker symbols saved."
+                "Ticker symbols saved."
             )
         except OSError as exc:
             st.error(f"Ticker symbols could not be saved: {exc}")
@@ -2877,12 +2961,13 @@ if st.session_state["selected_main_page"] not in ("Top 20", "Settings"):
     with st.container(key="floating_scan_controls"):
         if st.button("↻ Run scan again", type="primary", key="floating_run_scan"):
             st.session_state["run_scan"] = True
+            get_history.clear()
             try:
                 save_symbol_preferences(symbols_text)
+                if cloud_deployment:
+                    st.rerun()
                 st.toast(
-                    "Ticker symbols updated for this session."
-                    if cloud_deployment
-                    else "Ticker symbols saved."
+                    "Ticker symbols saved."
                 )
             except OSError as exc:
                 st.error(f"Ticker symbols could not be saved: {exc}")
@@ -2916,6 +3001,9 @@ for index, symbol in enumerate(symbols):
             high_distance_percent,
             maximum_rsi,
             require_up_day,
+            alpaca_key,
+            alpaca_secret,
+            alpaca_feed,
         )
         if result is None:
             errors.append(
