@@ -637,6 +637,17 @@ def select_filtered_stock(symbol: str) -> None:
     st.session_state["floating_stock_search_query"] = ""
 
 
+def queue_live_stock_search_selection(component_key: str) -> None:
+    """Queue a component selection before the next full script render."""
+    selected_symbol = st.session_state.get(component_key)
+    if not selected_symbol:
+        return
+    st.session_state["_pending_live_search_symbol"] = str(selected_symbol).strip()
+    st.session_state["live_stock_search_version"] = (
+        st.session_state.get("live_stock_search_version", 0) + 1
+    )
+
+
 @st.dialog("⚠️ SEC email required")
 def show_sec_email_required_dialog() -> None:
     st.warning(
@@ -2164,7 +2175,13 @@ if load_browser_credentials:
     st.session_state["_browser_credentials_loaded"] = True
 
 # Live search and other Add buttons run after the symbols widget is created.
-# Consume their queued update here, before creating that widget on this run.
+# A custom-component callback queues the selected ticker before this run begins.
+# Add it here so the symbols widget receives its updated value when it is created.
+pending_live_search_symbol = st.session_state.pop(
+    "_pending_live_search_symbol", None
+)
+if pending_live_search_symbol:
+    add_symbol_to_watchlist(pending_live_search_symbol)
 pending_symbols_text = st.session_state.pop("_pending_symbols_text", None)
 if pending_symbols_text is not None:
     st.session_state["symbols_text"] = pending_symbols_text
@@ -2251,17 +2268,17 @@ with st.container(key="floating_stock_search"):
                 for ticker in sidebar_directory["Ticker"].tolist()
             ]
             search_version = st.session_state.get("live_stock_search_version", 0)
-            selected_search_symbol = live_stock_search_component(
+            search_component_key = f"live_stock_search_{search_version}"
+            live_stock_search_component(
                 options=sidebar_search_options,
                 placeholder="Search stocks…",
-                key=f"live_stock_search_{search_version}",
+                key=search_component_key,
                 default=None,
+                on_change=lambda: queue_live_stock_search_selection(
+                    search_component_key
+                ),
             )
             st.session_state["stock_lookup_warning_shown"] = False
-            if selected_search_symbol:
-                add_symbol_to_watchlist(str(selected_search_symbol))
-                st.session_state["live_stock_search_version"] = search_version + 1
-                st.rerun()
         except Exception:
             open_lookup_warning = st.button(
                 "Stock lookup unavailable",
