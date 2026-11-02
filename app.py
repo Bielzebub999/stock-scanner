@@ -355,23 +355,30 @@ def write_preferences(preferences: dict) -> None:
         st.session_state["_pending_browser_preferences"] = browser_preferences
         if saved_symbols:
             st.session_state["_browser_local_watchlist"] = saved_symbols
-        if (
-            browser_cookie_manager is not None
-            and saved_symbols
-            and st.session_state.get("_browser_watchlist_cookie") != saved_symbols
-        ):
-            try:
-                browser_cookie_manager.set(
-                    BROWSER_WATCHLIST_COOKIE,
-                    saved_symbols,
-                    key="save_stock_scanner_watchlist",
-                    expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
-                    secure=True,
-                    same_site="strict",
-                )
-                st.session_state["_browser_watchlist_cookie"] = saved_symbols
-            except Exception:
-                pass
+        if browser_cookie_manager is not None:
+            cookie_values = (
+                (BROWSER_WATCHLIST_COOKIE, saved_symbols, "_browser_watchlist_cookie"),
+                (
+                    BROWSER_SEC_EMAIL_COOKIE,
+                    browser_preferences["sec_contact_email"],
+                    "_browser_sec_email_cookie",
+                ),
+            )
+            for cookie_name, cookie_value, state_key in cookie_values:
+                if not cookie_value or st.session_state.get(state_key) == cookie_value:
+                    continue
+                try:
+                    browser_cookie_manager.set(
+                        cookie_name,
+                        cookie_value,
+                        key=f"save_{cookie_name}",
+                        expires_at=datetime.datetime.now() + datetime.timedelta(days=365),
+                        secure=True,
+                        same_site="strict",
+                    )
+                    st.session_state[state_key] = cookie_value
+                except Exception:
+                    pass
         return
     try:
         PREFERENCES_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -499,7 +506,7 @@ def render_standalone_settings(cloud_deployment: bool) -> None:
                 value=st.session_state.get("sec_contact_email", ""),
             ).strip()
             sec_button_label = (
-                "Use SEC email for this session" if cloud_deployment else "Save SEC email"
+                "Save email in this browser" if cloud_deployment else "Save SEC email"
             )
             if st.button(sec_button_label, use_container_width=True):
                 if not sec_email_value or "@" not in sec_email_value:
@@ -508,8 +515,9 @@ def render_standalone_settings(cloud_deployment: bool) -> None:
                     st.session_state["sec_contact_email"] = sec_email_value
                     try:
                         if cloud_deployment:
+                            save_browser_credentials(sec_contact_email=sec_email_value)
                             st.session_state["settings_saved_message"] = (
-                                "SEC email is active for this browser session."
+                                "SEC email saved in this browser."
                             )
                         else:
                             save_email_preference(sec_email_value)
@@ -1374,23 +1382,57 @@ def calculate_rsi(close: pd.Series, period: int = 14) -> pd.Series:
     return 100 - (100 / (1 + relative_strength))
 
 
-@st.cache_data(ttl=900, show_spinner=False)
-def get_history(symbol: str) -> pd.DataFrame:
-    data = yf.download(
-        symbol,
-        period="3y",
-        interval="1d",
-        auto_adjust=True,
-        progress=False,
-        threads=False,
+def download_yahoo_chart_history(symbol: str, range_name: str = "3y") -> pd.DataFrame:
+    """Load daily Yahoo bars directly when yfinance returns an empty response."""
+    encoded_symbol = quote(symbol, safe="-^=")
+    url = (
+        f"https://query1.finance.yahoo.com/v8/finance/chart/{encoded_symbol}"
+        f"?range={range_name}&interval=1d&includePrePost=false&events=div%2Csplits"
     )
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "Mozilla/5.0 StockScanner/1.0",
+            "Accept": "application/json",
+        },
+    )
+    with urlopen(request, timeout=25) as response:
+        payload = json.load(response)
+    chart = payload.get("chart", {})
+    if chart.get("error"):
+        raise RuntimeError(chart["error"].get("description", "Yahoo returned an error."))
+    chart_results = chart.get("result") or []
+    if not chart_results:
+        return pd.DataFrame()
+    chart_result = chart_results[0]
+    timestamps = chart_result.get("timestamp") or []
+    quotes = chart_result.get("indicators", {}).get("quote") or []
+    if not timestamps or not quotes:
+        return pd.DataFrame()
+    quote_data = quotes[0]
+    row_count = len(timestamps)
+    frame = pd.DataFrame(
+        {
+            "Open": (quote_data.get("open") or [])[:row_count],
+            "High": (quote_data.get("high") or [])[:row_count],
+            "Low": (quote_data.get("low") or [])[:row_count],
+            "Close": (quote_data.get("close") or [])[:row_count],
+            "Volume": (quote_data.get("volume") or [])[:row_count],
+        },
+        index=pd.to_datetime(timestamps, unit="s", utc=True).tz_localize(None),
+    )
+    frame.index.name = "Date"
+    return frame
+
+
+def prepare_indicator_history(data: pd.DataFrame) -> pd.DataFrame:
     if data.empty:
         return data
-
-    # yfinance sometimes returns two-level column names, even for one ticker.
     if isinstance(data.columns, pd.MultiIndex):
         data.columns = data.columns.get_level_values(0)
-
+    required_columns = ["Open", "High", "Low", "Close", "Volume"]
+    if any(column not in data.columns for column in required_columns):
+        return pd.DataFrame()
     data = data.dropna(subset=["Close", "Volume"]).copy()
     data["SMA20"] = data["Close"].rolling(20).mean()
     data["SMA50"] = data["Close"].rolling(50).mean()
@@ -1404,6 +1446,31 @@ def get_history(symbol: str) -> pd.DataFrame:
     data["AvgVolume20"] = data["Volume"].rolling(20).mean()
     data["High20"] = data["High"].rolling(20).max()
     return data
+
+
+@st.cache_data(ttl=900, show_spinner=False)
+def get_history(symbol: str) -> pd.DataFrame:
+    try:
+        data = yf.download(
+            symbol,
+            period="3y",
+            interval="1d",
+            auto_adjust=True,
+            progress=False,
+            threads=False,
+        )
+    except Exception:
+        data = pd.DataFrame()
+    prepared = prepare_indicator_history(data)
+    if len(prepared) >= 51:
+        return prepared
+
+    # Streamlit Cloud can occasionally receive an empty/partial yfinance result.
+    # A direct chart request avoids caching that transient response as valid data.
+    fallback = prepare_indicator_history(download_yahoo_chart_history(symbol))
+    if fallback.empty:
+        raise RuntimeError("Yahoo returned no daily price data")
+    return fallback
 
 
 @st.cache_data(ttl=3600, show_spinner=False)
@@ -2834,7 +2901,9 @@ for index, symbol in enumerate(symbols):
             require_up_day,
         )
         if result is None:
-            errors.append(f"{symbol}: not enough price history")
+            errors.append(
+                f"{symbol}: only {len(history)} trading days were available; at least 51 are required"
+            )
         else:
             results.append(result)
             histories[symbol] = history
