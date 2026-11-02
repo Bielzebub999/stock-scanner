@@ -498,16 +498,18 @@ def render_standalone_settings(cloud_deployment: bool) -> None:
                 key="standalone_sec_contact_email",
                 value=st.session_state.get("sec_contact_email", ""),
             ).strip()
-            if st.button("Save SEC email", use_container_width=True):
+            sec_button_label = (
+                "Use SEC email for this session" if cloud_deployment else "Save SEC email"
+            )
+            if st.button(sec_button_label, use_container_width=True):
                 if not sec_email_value or "@" not in sec_email_value:
                     st.error("Enter a valid email address before saving.")
                 else:
                     st.session_state["sec_contact_email"] = sec_email_value
                     try:
                         if cloud_deployment:
-                            save_browser_credentials(sec_contact_email=sec_email_value)
                             st.session_state["settings_saved_message"] = (
-                                "SEC email saved in this browser."
+                                "SEC email is active for this browser session."
                             )
                         else:
                             save_email_preference(sec_email_value)
